@@ -12,7 +12,10 @@ import {
   Settings, 
   Building2,
   ChevronRight,
-  Zap
+  Zap,
+  BarChart3,
+  CheckSquare,
+  Bell
 } from 'lucide-react';
 
 const navigation = [
@@ -20,6 +23,9 @@ const navigation = [
   { name: 'Agent Builder', href: '/builder', icon: Bot },
   { name: 'Knowledge Base', href: '/knowledge', icon: Database },
   { name: 'Agent Monitor', href: '/monitor', icon: Brain },
+  { name: 'Task Manager', href: '/tasks', icon: CheckSquare },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Notifications', href: '/notifications', icon: Bell },
   { name: 'Team Management', href: '/team', icon: Users },
   { name: 'Email Integration', href: '/email', icon: Mail },
   { name: 'Settings', href: '/settings', icon: Settings },
