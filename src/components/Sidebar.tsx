@@ -15,7 +15,10 @@ import {
   Zap,
   BarChart3,
   CheckSquare,
-  Bell
+  Bell,
+  GitBranch,
+  Shield,
+  Plug
 } from 'lucide-react';
 
 const navigation = [
@@ -24,7 +27,10 @@ const navigation = [
   { name: 'Knowledge Base', href: '/knowledge', icon: Database },
   { name: 'Agent Monitor', href: '/monitor', icon: Brain },
   { name: 'Task Manager', href: '/tasks', icon: CheckSquare },
+  { name: 'Workflows', href: '/workflows', icon: GitBranch },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Security', href: '/security', icon: Shield },
+  { name: 'Integrations', href: '/integrations', icon: Plug },
   { name: 'Notifications', href: '/notifications', icon: Bell },
   { name: 'Team Management', href: '/team', icon: Users },
   { name: 'Email Integration', href: '/email', icon: Mail },
