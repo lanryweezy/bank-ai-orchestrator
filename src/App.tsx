@@ -14,6 +14,10 @@ import Notifications from "./pages/Notifications";
 import Workflows from "./pages/Workflows";
 import Security from "./pages/Security";
 import Integrations from "./pages/Integrations";
+import CustomerManagementPage from "./pages/CustomerManagement";
+import LoanManagementPage from "./pages/LoanManagement";
+import TransactionManagementPage from "./pages/TransactionManagement";
+import AIAgentTemplatesPage from "./pages/AIAgentTemplates";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,6 +39,10 @@ const App = () => (
           <Route path="/workflows" element={<Workflows />} />
           <Route path="/security" element={<Security />} />
           <Route path="/integrations" element={<Integrations />} />
+          <Route path="/customers" element={<CustomerManagementPage />} />
+          <Route path="/loans" element={<LoanManagementPage />} />
+          <Route path="/transactions" element={<TransactionManagementPage />} />
+          <Route path="/ai-templates" element={<AIAgentTemplatesPage />} />
           <Route path="/team" element={<Dashboard />} />
           <Route path="/email" element={<Dashboard />} />
           <Route path="/settings" element={<Dashboard />} />

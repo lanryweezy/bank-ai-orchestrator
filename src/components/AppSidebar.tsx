@@ -16,7 +16,11 @@ import {
   Bell,
   GitBranch,
   Shield,
-  Plug
+  Plug,
+  CreditCard,
+  ArrowRightLeft,
+  UserCheck,
+  Cpu
 } from 'lucide-react';
 import {
   Sidebar,
@@ -34,6 +38,7 @@ import {
 const navigation = [
   { name: 'Overview', href: '/', icon: Activity },
   { name: 'Agent Builder', href: '/builder', icon: Bot },
+  { name: 'AI Templates', href: '/ai-templates', icon: Cpu },
   { name: 'Knowledge Base', href: '/knowledge', icon: Database },
   { name: 'Agent Monitor', href: '/monitor', icon: Brain },
   { name: 'Task Manager', href: '/tasks', icon: CheckSquare },
@@ -42,6 +47,12 @@ const navigation = [
   { name: 'Security', href: '/security', icon: Shield },
   { name: 'Integrations', href: '/integrations', icon: Plug },
   { name: 'Notifications', href: '/notifications', icon: Bell },
+];
+
+const bankingModules = [
+  { name: 'Customer Management', href: '/customers', icon: UserCheck },
+  { name: 'Loan Management', href: '/loans', icon: CreditCard },
+  { name: 'Transaction Management', href: '/transactions', icon: ArrowRightLeft },
   { name: 'Team Management', href: '/team', icon: Users },
   { name: 'Email Integration', href: '/email', icon: Mail },
   { name: 'Settings', href: '/settings', icon: Settings },
@@ -64,10 +75,31 @@ export function AppSidebar() {
       
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Main Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>AI Platform</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {navigation.map((item) => {
+                const isActive = location.pathname === item.href;
+                return (
+                  <SidebarMenuItem key={item.name}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link to={item.href} className="flex items-center">
+                        <item.icon className="mr-3 h-5 w-5" />
+                        <span>{item.name}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Banking Operations</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {bankingModules.map((item) => {
                 const isActive = location.pathname === item.href;
                 return (
                   <SidebarMenuItem key={item.name}>
