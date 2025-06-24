@@ -19,8 +19,18 @@ import LoanManagementPage from "./pages/LoanManagement";
 import TransactionManagementPage from "./pages/TransactionManagement";
 import AIAgentTemplatesPage from "./pages/AIAgentTemplates";
 import NotFound from "./pages/NotFound";
+import LoginPage from "./pages/LoginPage"; // Added
+import RegisterPage from "./pages/RegisterPage"; // Added
+import { Navigate } from "react-router-dom"; // Added
 
 const queryClient = new QueryClient();
+
+// Basic check for auth token
+const isAuthenticated = () => !!localStorage.getItem('authToken');
+
+const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
+  return isAuthenticated() ? children : <Navigate to="/login" replace />;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -29,9 +39,25 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/builder" element={<AgentBuilder />} />
-          <Route path="/knowledge" element={<KnowledgeBase />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route
+            path="/"
+            element={
+              isAuthenticated() ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          {/* Protect other routes as needed */}
+          <Route path="/builder" element={<ProtectedRoute><AgentBuilder /></ProtectedRoute>} />
+          <Route path="/knowledge" element={<ProtectedRoute><KnowledgeBase /></ProtectedRoute>} />
           <Route path="/monitor" element={<Monitor />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
