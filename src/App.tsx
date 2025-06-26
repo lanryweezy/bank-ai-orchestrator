@@ -5,13 +5,16 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
-import AgentBuilder from "./pages/AgentBuilder";
+import ConfigureAgentPage from "./pages/ConfigureAgentPage"; // Renamed
+import MyConfiguredAgentsPage from "./pages/MyConfiguredAgentsPage"; // Added
+import WorkflowRunsPage from "./pages/WorkflowRunsPage"; // Added
+import WorkflowRunDetailsPage from "./pages/WorkflowRunDetailsPage"; // Added
 import KnowledgeBase from "./pages/KnowledgeBase";
 import Monitor from "./pages/Monitor";
 import Tasks from "./pages/Tasks";
 import AnalyticsPage from "./pages/Analytics";
 import Notifications from "./pages/Notifications";
-import Workflows from "./pages/Workflows";
+import WorkflowsPage from "./pages/Workflows"; // Renamed import
 import Security from "./pages/Security";
 import Integrations from "./pages/Integrations";
 import CustomerManagementPage from "./pages/CustomerManagement";
@@ -56,13 +59,16 @@ const App = () => (
             }
           />
           {/* Protect other routes as needed */}
-          <Route path="/builder" element={<ProtectedRoute><AgentBuilder /></ProtectedRoute>} />
+          <Route path="/configure-agent" element={<ProtectedRoute><ConfigureAgentPage /></ProtectedRoute>} />
+          <Route path="/my-agents" element={<ProtectedRoute><MyConfiguredAgentsPage /></ProtectedRoute>} />
+          <Route path="/workflow-runs" element={<ProtectedRoute><WorkflowRunsPage /></ProtectedRoute>} />
+          <Route path="/workflow-runs/:runId" element={<ProtectedRoute><WorkflowRunDetailsPage /></ProtectedRoute>} />
           <Route path="/knowledge" element={<ProtectedRoute><KnowledgeBase /></ProtectedRoute>} />
           <Route path="/monitor" element={<Monitor />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/notifications" element={<Notifications />} />
-          <Route path="/workflows" element={<Workflows />} />
+          <Route path="/workflows" element={<ProtectedRoute><WorkflowsPage /></ProtectedRoute>} />
           <Route path="/security" element={<Security />} />
           <Route path="/integrations" element={<Integrations />} />
           <Route path="/customers" element={<CustomerManagementPage />} />

@@ -1,8 +1,21 @@
-# Welcome to your Lovable project
+# AI Agent Management & Workflow Automation Platform
+
+This project is a platform designed to help banks (or other organizations) manage AI agents and automate complex workflows. It provides capabilities to define agent templates, configure specific agent instances, design workflows that orchestrate these agents and human tasks, and manage the execution of these workflows.
 
 ## Project info
 
 **URL**: https://lovable.dev/projects/7d905d6d-0adb-4536-975c-13f21fb3101a
+
+## Core Features (Phase 1)
+
+*   **User Authentication:** Secure login and registration.
+*   **Agent Template Management:** Define types of AI agents (e.g., "Loan Document Checker") and their configurable parameters via JSON schemas.
+*   **Configured Agent Instances:** Allow users to create and manage specific instances of agent templates with their bank-specific configurations.
+*   **Workflow Engine (Basic):**
+    *   Define workflow structures (sequences of agent executions and human tasks).
+    *   Initiate and track workflow runs.
+    *   Manage tasks assigned to users.
+*   **API Documentation:** Interactive API documentation available via Swagger UI.
 
 ## How can I edit this code?
 
@@ -32,8 +45,18 @@ cd <YOUR_PROJECT_NAME>
 # Step 3: Install the necessary dependencies.
 npm i
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Step 4: Start the frontend development server (Vite)
+# Typically on http://localhost:8080
 npm run dev
+
+# Step 5: (In a new terminal) Start the backend development server (Node.js/Express)
+# Typically on http://localhost:3001 (see backend/.env.example for port)
+# Ensure you have a .env file in the backend/ directory configured (see backend/.env.example)
+# and your PostgreSQL database is running and schema applied (backend/sql/schema.sql).
+npm run dev:backend
+
+# Access API Documentation (Swagger UI)
+# Once the backend is running, navigate to http://localhost:3001/api-docs (or your configured backend port)
 ```
 
 **Edit a file directly in GitHub**
@@ -54,11 +77,9 @@ npm run dev
 
 This project is built with:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- Frontend: Vite, TypeScript, React, shadcn-ui, Tailwind CSS
+- Backend: Node.js, Express.js, TypeScript, PostgreSQL
+- API Documentation: Swagger/OpenAPI
 
 ## How can I deploy this project?
 

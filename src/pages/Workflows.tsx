@@ -1,16 +1,16 @@
 
 import React from 'react';
 import Layout from '@/components/Layout';
-import WorkflowBuilder from '@/components/WorkflowBuilder';
+import WorkflowManager from '@/components/WorkflowManager'; // Renamed import
 
-const Workflows = () => {
+const WorkflowsPage = () => { // Renamed page component for clarity
   return (
     <Layout>
       <div className="p-6">
-        <WorkflowBuilder />
+        <WorkflowManager />
       </div>
     </Layout>
   );
 };
 
-export default Workflows;
+export default WorkflowsPage; // Renamed export
