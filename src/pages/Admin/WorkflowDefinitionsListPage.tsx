@@ -18,43 +18,29 @@ const WorkflowDefinitionsListPageAdmin: React.FC = () => {
   const [groupedDefinitions, setGroupedDefinitions] = useState<Record<string, WorkflowDefinition[]>>({});
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [showOnlyActiveLatest, setShowOnlyActiveLatest] = useState<boolean>(true); // Default to showing latest active
+  const [showAllVersions, setShowAllVersions] = useState<boolean>(false);
 
   const fetchDefinitions = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams();
-      // The backend /admin/workflows?onlyActive=true now returns latest active per name.
-      // If we want ALL versions, we call without onlyActive.
-      if (showOnlyActiveLatest) {
-        params.append('onlyActive', 'true');
-      }
-      const data = await apiClient<WorkflowDefinition[]>(`/admin/workflows?${params.toString()}`);
+      const endpoint = showAllVersions ? '/admin/workflows' : '/admin/workflows?onlyActive=true';
+      const data = await apiClient<WorkflowDefinition[]>(endpoint);
 
-      if (showOnlyActiveLatest) {
-        // Data is already latest active per name
-        const grouped: Record<string, WorkflowDefinition[]> = {};
-        data.forEach(def => {
-          grouped[def.name] = [def]; // Store as an array for consistency, even if only one
-        });
-        setGroupedDefinitions(grouped);
-      } else {
-        // Fetch all versions and group them by name
-        const allDefinitions = await apiClient<WorkflowDefinition[]>('/admin/workflows');
-        const grouped: Record<string, WorkflowDefinition[]> = {};
-        allDefinitions.forEach(def => {
-          if (!grouped[def.name]) {
-            grouped[def.name] = [];
-          }
-          grouped[def.name].push(def);
-        });
-        // Sort versions within each group
-        for (const name in grouped) {
-          grouped[name].sort((a, b) => b.version - a.version); // Highest version first
+      const grouped: Record<string, WorkflowDefinition[]> = {};
+      data.forEach(def => {
+        if (!grouped[def.name]) {
+          grouped[def.name] = [];
         }
-        setGroupedDefinitions(grouped);
+        grouped[def.name].push(def);
+      });
+
+      // Sort versions within each group (highest version first)
+      for (const name in grouped) {
+        grouped[name].sort((a, b) => b.version - a.version);
       }
+      setGroupedDefinitions(grouped);
+
     } catch (err: any) {
       console.error('Failed to fetch workflow definitions:', err);
       setError(err.data?.message || err.message || 'Failed to fetch workflow definitions. Ensure you have admin privileges.');
@@ -80,22 +66,12 @@ const WorkflowDefinitionsListPageAdmin: React.FC = () => {
     }
   };
 
-  const handleToggleShowOnlyActiveLatest = (checked: boolean) => {
-    setShowOnlyActiveLatest(checked);
-  };
-
-  // Navigate to a new page/modal to show all versions for a name
-  const handleViewAllVersions = (workflowName: string) => {
-    // This would typically navigate to a new route like `/admin/workflow-definitions/name/${workflowName}/versions`
-    // For now, we can just toggle the filter to show all versions if not already shown
-    setShowOnlyActiveLatest(false);
-    // In a more complete UI, you'd navigate or open a modal pre-filtered for `workflowName`
-    alert(`Implement navigation/modal to show all versions for: ${workflowName}`);
+  const handleToggleShowAllVersions = (checked: boolean) => {
+    setShowAllVersions(checked);
   };
 
   const handleCreateNewVersion = (workflowName: string) => {
-    // Navigate to the edit page, but in a "new version" mode.
-    // The edit page will need to handle this, perhaps by not having an ID but having a base name.
+    // Navigate to the edit page, passing the workflowName to signify creating a new version
     navigate(`/admin/workflow-definitions/new-version/${workflowName}`);
   };
 
@@ -169,12 +145,12 @@ const WorkflowDefinitionsListPageAdmin: React.FC = () => {
 
         <div className="flex items-center space-x-2 mb-4">
           <Checkbox
-            id="showOnlyActiveLatest"
-            checked={showOnlyActiveLatest}
-            onCheckedChange={handleToggleShowOnlyActiveLatest}
+            id="showAllVersionsToggle"
+            checked={showAllVersions}
+            onCheckedChange={handleToggleShowAllVersions}
           />
-          <Label htmlFor="showOnlyActiveLatest" className="text-sm font-medium text-gray-700 cursor-pointer">
-            Show only latest active version per workflow
+          <Label htmlFor="showAllVersionsToggle" className="text-sm font-medium text-gray-700 cursor-pointer">
+            Show all versions for each workflow
           </Label>
         </div>
 
@@ -185,7 +161,7 @@ const WorkflowDefinitionsListPageAdmin: React.FC = () => {
             </CardHeader>
             <CardContent>
               <p className="text-gray-500 mb-4">
-                {showOnlyActiveLatest ? "No active workflow definitions." : "No workflow definitions created yet."}
+                {showAllVersions ? "No workflow definitions created yet." : "No active workflow definitions found."}
               </p>
               <Button onClick={() => navigate('/admin/workflow-definitions/new')}>
                 Create New Workflow
@@ -194,25 +170,13 @@ const WorkflowDefinitionsListPageAdmin: React.FC = () => {
           </Card>
         )}
 
-        {Object.entries(groupedDefinitions).map(([name, versions]) => (
+        {Object.entries(groupedDefinitions).map(([name, versionsInGroup]) => (
           <Card key={name} className="mb-6">
             <CardHeader className="flex flex-row justify-between items-center">
               <CardTitle className="text-xl">{name}</CardTitle>
-              <div>
-                {!showOnlyActiveLatest && (
-                    <Button variant="outline" size="sm" className="mr-2" onClick={() => handleViewAllVersions(name)} title="View all versions (already showing all)">
-                        <History className="h-4 w-4 mr-1" /> All Versions
-                    </Button>
-                )}
-                 {showOnlyActiveLatest && versions.length > 0 && ( // Check if any version exists before showing "View All"
-                    <Button variant="outline" size="sm" className="mr-2" onClick={() => handleViewAllVersions(name)}>
-                        <History className="h-4 w-4 mr-1" /> View All Versions
-                    </Button>
-                )}
-                <Button variant="default" size="sm" onClick={() => handleCreateNewVersion(name)} className="bg-sky-500 hover:bg-sky-600 text-white">
-                  <GitCommit className="h-4 w-4 mr-1" /> Create New Version
-                </Button>
-              </div>
+              <Button variant="default" size="sm" onClick={() => handleCreateNewVersion(name)} className="bg-sky-500 hover:bg-sky-600 text-white">
+                <GitCommit className="h-4 w-4 mr-1" /> Create New Version
+              </Button>
             </CardHeader>
             <CardContent className="p-0">
               <Table>
@@ -226,7 +190,9 @@ const WorkflowDefinitionsListPageAdmin: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(showOnlyActiveLatest ? versions.slice(0,1) : versions).map((def) => ( // Show only first if latestActive, else all
+                  {/* If showAllVersions is false, we display only the first version (which is the latest active due to backend logic for that endpoint) */}
+                  {/* If showAllVersions is true, we display all fetched versions for that name */}
+                  {(showAllVersions ? versionsInGroup : versionsInGroup.slice(0,1)).map((def) => (
                     <TableRow key={def.workflow_id}>
                       <TableCell className="font-medium text-center">{def.version}</TableCell>
                       <TableCell className="text-sm text-gray-600 line-clamp-2" title={def.description}>

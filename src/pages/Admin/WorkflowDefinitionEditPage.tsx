@@ -24,32 +24,25 @@ const isValidJson = (str: string) => {
 };
 
 const WorkflowDefinitionEditPage: React.FC = () => {
-  const { workflowId, workflowName: workflowNameFromRoute } = useParams<{ workflowId?: string; workflowName?: string }>();
+  const { workflowId, baseWorkflowName } = useParams<{ workflowId?: string; baseWorkflowName?: string }>();
   const navigate = useNavigate();
 
-  // Determine mode based on URL parameters
-  let determinedMode: 'create_new' | 'create_version' | 'edit_version' = 'create_new';
-  if (workflowId) {
-    determinedMode = 'edit_version';
-  } else if (workflowNameFromRoute) {
-    determinedMode = 'create_version';
-  }
+  const isEditMode = Boolean(workflowId); // Editing a specific version
+  const isCreateNewVersionMode = Boolean(baseWorkflowName); // Creating a new version for an existing name
+  const isCreateBrandNewMode = !isEditMode && !isCreateNewVersionMode; // Creating a brand new workflow name
 
-  const [mode, setMode] = useState<'create_new' | 'create_version' | 'edit_version'>(determinedMode);
-  const [pageTitle, setPageTitle] = useState<string>('Create New Workflow Definition');
-
-  const [originalName, setOriginalName] = useState<string>(workflowNameFromRoute || '');
+  const [pageTitle, setPageTitle] = useState<string>('Workflow Definition');
 
   const [definition, setDefinition] = useState<WorkflowDefinitionInput>({
-    name: workflowNameFromRoute || '', // Pre-fill name if creating new version
+    name: baseWorkflowName || '',
     description: '',
     definition_json: {},
-    version: 1,
+    version: 1, // This will be informative in UI, actual version set by backend for new versions
     is_active: true,
   });
   const [definitionJsonString, setDefinitionJsonString] = useState<string>('{}');
 
-  const [loading, setLoading] = useState<boolean>(true); // Start true to load data
+  const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -57,75 +50,74 @@ const WorkflowDefinitionEditPage: React.FC = () => {
 
   const defaultJsonStructure = '{\n  "description": "My new workflow version",\n  "start_step": "initial_step",\n  "steps": [\n    {\n      "name": "initial_step",\n      "type": "human_review",\n      "assigned_role": "user",\n      "form_schema": { "type": "object", "properties": { "comments": {"type": "string"} } },\n      "transitions": []\n    }\n  ]\n}';
 
-  const fetchLatestVersionForName = useCallback(async (name: string) => {
-    setLoading(true);
-    try {
-      const versions = await apiClient<WorkflowDefinition[]>(`/admin/workflows/name/${name}/versions`);
-      if (versions && versions.length > 0) {
-        const latestVersion = versions.sort((a,b) => b.version - a.version)[0]; // already sorted by service, but good practice
-        setDefinition(prev => ({
-          ...prev,
-          name: latestVersion.name,
-          description: latestVersion.description || '',
-          definition_json: latestVersion.definition_json || {},
-          is_active: true, // New versions default to active
-          version: (latestVersion.version || 0) + 1 // For display only, backend determines actual
-        }));
-        setDefinitionJsonString(JSON.stringify(latestVersion.definition_json || {}, null, 2));
-        setOriginalName(latestVersion.name);
-        setPageTitle(`Create New Version for: ${latestVersion.name}`);
-      } else {
-        setError(`No existing workflow found named "${name}" to base a new version on. Please create it as a new workflow first.`);
-        setDefinition(prev => ({...prev, name: name, version: 1}));
-        setOriginalName(name);
-        setDefinitionJsonString(defaultJsonStructure);
-        setPageTitle(`Create New Version for: ${name} (will be v1)`);
+  const fetchWorkflowDetails = useCallback(async () => {
+    if (isEditMode && workflowId) {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await apiClient<WorkflowDefinition>(`/admin/workflows/${workflowId}`);
+        setDefinition({
+          name: data.name,
+          description: data.description || '',
+          definition_json: data.definition_json || {},
+          version: data.version,
+          is_active: data.is_active,
+        });
+        setDefinitionJsonString(JSON.stringify(data.definition_json || {}, null, 2));
+        setPageTitle(`Edit Workflow: ${data.name} (v${data.version})`);
+      } catch (err: any) {
+        setError(err.data?.message || err.message || 'Failed to fetch workflow definition details.');
+      } finally {
+        setLoading(false);
       }
-    } catch (err:any) {
-      setError(err.data?.message || err.message || `Failed to fetch latest version for ${name}.`);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-
-  const fetchDefinitionById = useCallback(async (id: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await apiClient<WorkflowDefinition>(`/admin/workflows/${id}`);
-      setDefinition({
-        name: data.name,
-        description: data.description || '',
-        definition_json: data.definition_json || {},
-        version: data.version,
-        is_active: data.is_active,
-      });
-      setDefinitionJsonString(JSON.stringify(data.definition_json || {}, null, 2));
-      setOriginalName(data.name);
-      setPageTitle(`Edit Workflow: ${data.name} (v${data.version})`);
-    } catch (err: any) {
-      console.error('Failed to fetch workflow definition:', err);
-      setError(err.data?.message || err.message || 'Failed to fetch workflow definition details.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    // This effect runs once on component mount due to determinedMode
-    if (determinedMode === 'edit_version' && workflowId) {
-      fetchDefinitionById(workflowId);
-    } else if (determinedMode === 'create_version' && workflowNameFromRoute) {
-      fetchLatestVersionForName(workflowNameFromRoute);
-    } else { // 'create_new'
+    } else if (isCreateNewVersionMode && baseWorkflowName) {
+      // Fetch the latest version of `baseWorkflowName` to prefill description and definition_json
+      // The backend service `createNewWorkflowVersionFromLatest` will handle setting the new version number.
+      setLoading(true);
+      setError(null);
+      try {
+        // This endpoint needs to exist: GET /admin/workflows/name/:name/latest
+        // For now, we'll assume it returns the latest version (active or not for prefill)
+        // Or, use the existing getAllWorkflowVersionsByName and pick the latest.
+        const versions = await apiClient<WorkflowDefinition[]>(`/admin/workflows/name/${baseWorkflowName}/versions`);
+        if (versions && versions.length > 0) {
+          const latestVersion = versions[0]; // Assuming sorted by version desc
+          setDefinition(prev => ({
+            ...prev,
+            name: latestVersion.name, // Name is fixed
+            description: latestVersion.description || '',
+            definition_json: latestVersion.definition_json || {},
+            is_active: true, // New versions default to active
+            version: (latestVersion.version || 0) + 1 // Informational, backend sets actual
+          }));
+          setDefinitionJsonString(JSON.stringify(latestVersion.definition_json || {}, null, 2));
+          setPageTitle(`Create New Version for: ${latestVersion.name}`);
+        } else {
+           // If no workflow with that name exists, treat as creating a new v1 for that name
+          setDefinition(prev => ({...prev, name: baseWorkflowName, version: 1, is_active: true}));
+          setDefinitionJsonString(defaultJsonStructure);
+          setPageTitle(`Create Workflow: ${baseWorkflowName} (v1)`);
+        }
+      } catch (err: any) {
+         setError(err.data?.message || err.message || `Failed to fetch base workflow details for ${baseWorkflowName}.`);
+         // Fallback to creating a new workflow with this name
+         setDefinition(prev => ({...prev, name: baseWorkflowName, version: 1, is_active: true}));
+         setDefinitionJsonString(defaultJsonStructure);
+         setPageTitle(`Create Workflow: ${baseWorkflowName} (v1)`);
+      } finally {
+        setLoading(false);
+      }
+    } else { // Create Brand New Mode
       setDefinition({ name: '', description: '', definition_json: {}, version: 1, is_active: true });
       setDefinitionJsonString(defaultJsonStructure);
-      setOriginalName('');
       setPageTitle('Create New Workflow Definition');
-      setLoading(false); // Not fetching anything for create_new
+      setLoading(false);
     }
-  }, [determinedMode, workflowId, workflowNameFromRoute, fetchDefinitionById, fetchLatestVersionForName]);
+  }, [workflowId, baseWorkflowName, isEditMode, isCreateNewVersionMode, defaultJsonStructure]);
+
+  useEffect(() => {
+    fetchWorkflowDetails();
+  }, [fetchWorkflowDetails]);
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -134,11 +126,11 @@ const WorkflowDefinitionEditPage: React.FC = () => {
         const { checked } = e.target as HTMLInputElement;
         setDefinition(prev => ({ ...prev, [name]: checked }));
     } else {
-        // Name and Version are read-only in edit_version and create_version modes after initial load
-        if ((mode === 'edit_version' || mode === 'create_version') && (name === 'name' || name === 'version')) {
+        // In edit mode or create new version mode, 'name' and 'version' are read-only after initial load
+        if ((isEditMode || isCreateNewVersionMode) && (name === 'name' || name === 'version')) {
             return;
         }
-        setDefinition(prev => ({ ...prev, [name]: value }));
+        setDefinition(prev => ({ ...prev, [name]: name === 'version' ? (value === '' ? undefined : Number(value)) : value }));
     }
   };
 
@@ -168,43 +160,64 @@ const WorkflowDefinitionEditPage: React.FC = () => {
     const currentJson = JSON.parse(definitionJsonString);
 
     try {
-      if (mode === 'edit_version' && workflowId) {
+      if (isEditMode && workflowId) {
+        // Update existing specific version
         const payload: Partial<WorkflowDefinitionInput> = {
           description: definition.description,
           definition_json: currentJson,
           is_active: definition.is_active,
+          // Name and version are not changed here as per service logic
         };
         const updatedDef = await apiClient<WorkflowDefinition>(`/admin/workflows/${workflowId}`, {
           method: 'PUT',
           data: payload,
         });
         setSuccessMessage(`Workflow "${updatedDef.name}" (v${updatedDef.version}) updated successfully!`);
-      } else if (mode === 'create_version' && originalName) {
-        const payload: Partial<WorkflowDefinitionInput> = {
+      } else if (isCreateNewVersionMode && baseWorkflowName) {
+        // Create a new version for an existing name
+        // The backend route POST /admin/workflows/name/:name/versions would handle this
+        // It would internally call createNewWorkflowVersionFromLatest or similar service
+        const payload = { // Data for the NEW version
           description: definition.description,
           definition_json: currentJson,
-          is_active: definition.is_active, // New versions default to active
+          is_active: definition.is_active,
         };
-        const newVersion = await apiClient<WorkflowDefinition>(`/admin/workflows/name/${originalName}/versions`, {
+        // This API endpoint needs to be created: POST /admin/workflows/name/:baseWorkflowName/versions
+        // For now, let's simulate by calling the general create endpoint, assuming backend handles versioning.
+        // OR, adapt the current create endpoint if it can handle "create new version" logic.
+        // The backend createWorkflowDefinition if is_active=true, will deactivate others of same name.
+        // It will take the version from payload or default to 1.
+        // This is not ideal for "create new version" which implies incrementing.
+        // **Using a placeholder for a dedicated "create new version" API call for now**
+        // For this iteration, we'll call the standard POST /admin/workflows, and the admin must manage version numbers carefully.
+        // This is a simplification due to lack of a dedicated "create new version" backend route in this step.
+         const newVersionPayload: WorkflowDefinitionInput = {
+            name: baseWorkflowName, // Fixed name
+            description: definition.description,
+            definition_json: currentJson,
+            version: definition.version, // User suggests next version, backend validates uniqueness
+            is_active: definition.is_active,
+        };
+        const newVersion = await apiClient<WorkflowDefinition>(`/admin/workflows`, { // Using general create
           method: 'POST',
-          data: payload,
+          data: newVersionPayload,
         });
         setSuccessMessage(`New version (v${newVersion.version}) for workflow "${newVersion.name}" created successfully!`);
         setTimeout(() => navigate(`/admin/workflow-definitions/edit/${newVersion.workflow_id}`), 1500);
 
-      } else { // mode === 'create_new'
+      } else { // Create Brand New Workflow (isCreateBrandNewMode)
          const payload: WorkflowDefinitionInput = {
             name: definition.name,
             description: definition.description,
             definition_json: currentJson,
-            version: 1, // First version is always 1
+            version: Number(definition.version) || 1, // Ensure version is a number, default to 1
             is_active: definition.is_active,
         };
         const newDef = await apiClient<WorkflowDefinition>('/admin/workflows', {
           method: 'POST',
           data: payload,
         });
-        setSuccessMessage(`Workflow "${newDef.name}" (v1) created successfully!`);
+        setSuccessMessage(`Workflow "${newDef.name}" (v${newDef.version || 1}) created successfully!`);
         setTimeout(() => navigate(`/admin/workflow-definitions/edit/${newDef.workflow_id}`), 1500);
       }
     } catch (err: any) {
@@ -220,7 +233,7 @@ const WorkflowDefinitionEditPage: React.FC = () => {
     }
   };
 
-  if (loading) { // Combined loading check for all fetch scenarios
+  if (loading) {
      return (
       <Layout>
         <div className="p-6 space-y-4">
@@ -272,9 +285,9 @@ const WorkflowDefinitionEditPage: React.FC = () => {
           <CardHeader>
             <CardTitle className="text-2xl">{pageTitle}</CardTitle>
             <CardDescription>
-              {mode === 'edit_version' && `Editing details for version ${definition.version} of workflow "${originalName}". Name and version number are fixed for this specific record.`}
-              {mode === 'create_version' && `Creating a new version for workflow "${originalName}". The new version number will be automatically assigned.`}
-              {mode === 'create_new' && 'Define a new workflow name and its first version.'}
+              {isEditMode && `Editing details for version ${definition.version} of workflow "${definition.name}". Name and version number are fixed for this specific record.`}
+              {isCreateNewVersionMode && `Creating a new version for workflow "${baseWorkflowName}". The new version number will be auto-suggested or set by the backend.`}
+              {isCreateBrandNewMode && 'Define a new workflow name and its first version.'}
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
@@ -312,10 +325,10 @@ const WorkflowDefinitionEditPage: React.FC = () => {
                   placeholder="e.g., Loan Application Processing"
                   required
                   className="mt-1"
-                  disabled={mode === 'edit_version' || mode === 'create_version'} // Name is read-only if editing or creating new version for existing name
+                  disabled={isEditMode || isCreateNewVersionMode}
                 />
-                {(mode === 'edit_version' || mode === 'create_version') && (
-                  <p className="text-xs text-gray-500 mt-1">Workflow name cannot be changed when editing or creating a new version.</p>
+                {(isEditMode || isCreateNewVersionMode) && (
+                  <p className="text-xs text-gray-500 mt-1">Workflow name is fixed when editing or creating a new version.</p>
                 )}
               </div>
 
@@ -339,16 +352,16 @@ const WorkflowDefinitionEditPage: React.FC = () => {
                         required
                         min="1"
                         className="mt-1"
-                        disabled={mode === 'edit_version' || mode === 'create_version'} // Version is read-only if editing or creating new version
+                        disabled={isEditMode || isCreateNewVersionMode}
                     />
-                    {mode === 'create_new' && <p className="text-xs text-gray-500 mt-1">Set to 1 for the first version. Name & Version combination must be unique.</p>}
-                    {mode === 'create_version' && <p className="text-xs text-gray-500 mt-1">New version number will be auto-assigned by the system.</p>}
-                    {mode === 'edit_version' && <p className="text-xs text-gray-500 mt-1">Version number is fixed for this record.</p>}
+                    {isCreateBrandNewMode && <p className="text-xs text-gray-500 mt-1">Set to 1 for the first version. Name & Version combination must be unique.</p>}
+                    {isCreateNewVersionMode && <p className="text-xs text-gray-500 mt-1">New version number will be auto-suggested by the system (e.g., incremented from latest).</p>}
+                    {isEditMode && <p className="text-xs text-gray-500 mt-1">Version number is fixed for this specific record.</p>}
                 </div>
                 <div className="flex items-center pt-8 space-x-2">
                     <Checkbox id="is_active" name="is_active" checked={definition.is_active} onCheckedChange={(checked) => setDefinition(prev => ({ ...prev, is_active: Boolean(checked) }))} />
                     <Label htmlFor="is_active" className="cursor-pointer">Active</Label>
-                    <p className="text-xs text-gray-500">(Only one version of a workflow name can be active)</p>
+                    <p className="text-xs text-gray-500 mt-1">Activating this version will deactivate other versions of the same workflow name.</p>
                 </div>
               </div>
 
@@ -370,7 +383,7 @@ const WorkflowDefinitionEditPage: React.FC = () => {
             <CardFooter>
               <Button type="submit" disabled={saving || loading} className="banking-gradient text-white">
                 <Save className="h-4 w-4 mr-2" />
-                {saving ? 'Saving...' : (isEditing ? 'Save Changes' : 'Create Definition')}
+                {saving ? 'Saving...' : (isEditMode ? 'Save Changes' : (isCreateNewVersionMode ? 'Create New Version' : 'Create Workflow'))}
               </Button>
             </CardFooter>
           </form>
