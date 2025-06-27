@@ -155,6 +155,26 @@ CREATE INDEX idx_tasks_assigned_to_agent_id ON tasks(assigned_to_agent_id);
 CREATE INDEX idx_tasks_assigned_to_user_id ON tasks(assigned_to_user_id);
 CREATE INDEX idx_tasks_assigned_to_role ON tasks(assigned_to_role);
 
+
+-- Task Comments Table
+CREATE TABLE task_comments (
+    comment_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    task_id UUID NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(user_id), -- User who made the comment
+    comment_text TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP -- In case comments are editable
+);
+
+CREATE TRIGGER update_task_comments_updated_at
+BEFORE UPDATE ON task_comments
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE INDEX idx_task_comments_task_id ON task_comments(task_id);
+CREATE INDEX idx_task_comments_user_id ON task_comments(user_id);
+
+
 -- Note: The chk_task_assignment constraint might need refinement based on exact assignment logic.
 -- For example, a human task might initially be unassigned or assigned to a group/role.
 -- The current constraint is a basic example.

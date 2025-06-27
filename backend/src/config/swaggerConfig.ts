@@ -201,6 +201,32 @@ const options: swaggerJsdoc.Options = {
             properties: {
                 output_data_json: { type: 'object', nullable: true, example: { reviewOutcome: "approved" } }
             }
+        },
+        TaskCommentInput: {
+            type: 'object',
+            properties: {
+                comment_text: { type: 'string', description: "The content of the comment.", example: "This task needs further clarification." }
+            },
+            required: ["comment_text"]
+        },
+        TaskComment: {
+            type: 'object',
+            properties: {
+                comment_id: { type: 'string', format: 'uuid', readOnly: true },
+                task_id: { type: 'string', format: 'uuid', readOnly: true },
+                user_id: { type: 'string', format: 'uuid', readOnly: true },
+                comment_text: { type: 'string' },
+                created_at: { type: 'string', format: 'date-time', readOnly: true },
+                updated_at: { type: 'string', format: 'date-time', readOnly: true },
+                // User details are joined in the service, so include them here
+                user: {
+                    type: 'object',
+                    properties: {
+                        username: { type: 'string' },
+                        full_name: { type: 'string', nullable: true }
+                    }
+                }
+            }
         }
       },
       securitySchemes: { // Define security schemes (e.g., Bearer token for JWT)

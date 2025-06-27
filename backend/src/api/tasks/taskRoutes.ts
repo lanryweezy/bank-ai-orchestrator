@@ -3,15 +3,20 @@ import { ZodError } from 'zod';
 import {
     getTaskById,
     getTasksForUser,
-    // completeTask, // Direct completion via API might be complex due to workflow progression
-    taskInputSchema // For validating output data primarily
+    taskInputSchema, // For validating output data primarily in completeTask
+    createTaskComment,
+    getTaskComments,
+    taskCommentSchema
 } from '../../services/taskService';
 import { processTaskCompletionAndContinueWorkflow } from '../../services/workflowRunService'; // Use this to handle completion
-import { authenticateToken, isBankUser } from '../../middleware/authMiddleware';
+import { authenticateToken, isBankUser, isPlatformAdmin } // Assuming isBankUser for general task ops
+    from '../../middleware/authMiddleware';
 
 const router = express.Router();
 
+// All routes related to tasks are authenticated for at least a bank_user
 router.use(authenticateToken, isBankUser);
+
 
 // GET /api/tasks - Get tasks for the authenticated user
 // Add query params for filtering by status, etc.
@@ -78,6 +83,129 @@ router.post('/:taskId/complete', async (req: express.Request, res: express.Respo
     res.status(500).json({ message: 'Internal server error' });
   }
 });
+
+
+// --- Task Comments Routes ---
+
+/**
+ * @openapi
+ * /tasks/{taskId}/comments:
+ *   post:
+ *     tags: [Tasks]
+ *     summary: Add a comment to a task
+ *     description: Allows an authenticated user to add a comment to a specific task.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: taskId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID of the task to comment on.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/TaskCommentInput'
+ *     responses:
+ *       '201':
+ *         description: Comment added successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/TaskComment'
+ *       '400':
+ *         description: Invalid input (e.g., empty comment).
+ *       '403':
+ *         description: Forbidden (user may not have rights to comment or view task).
+ *       '404':
+ *         description: Task not found.
+ *       '500':
+ *         description: Internal server error.
+ */
+router.post('/:taskId/comments', async (req: express.Request, res: express.Response) => {
+    try {
+        const { taskId } = req.params;
+        const userId = req.user!.userId; // User must be authenticated
+
+        // Authorization: Check if user can view/access the task before commenting
+        const task = await getTaskById(taskId);
+        if (!task) {
+            return res.status(404).json({ message: 'Task not found.' });
+        }
+        // Basic check: user is assigned, or is admin. More granular checks can be added.
+        // This check might be too simplistic depending on desired visibility of tasks.
+        // For now, any authenticated user part of the system (isBankUser) can comment if they know the task ID.
+        // A stricter rule would be: task.assigned_to_user_id === userId || req.user.role === 'platform_admin' etc.
+        // Or check if user is part of the workflow run.
+        // For now, relying on `isBankUser` for general access to tasks they might be involved in.
+
+        const { comment_text } = taskCommentSchema.parse(req.body);
+        const newComment = await createTaskComment(taskId, userId, comment_text);
+        res.status(201).json(newComment);
+    } catch (error: any) {
+        if (error instanceof ZodError) {
+            return res.status(400).json({ message: 'Validation failed', errors: error.errors });
+        }
+        console.error('Error adding task comment:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
+/**
+ * @openapi
+ * /tasks/{taskId}/comments:
+ *   get:
+ *     tags: [Tasks]
+ *     summary: Get comments for a task
+ *     description: Retrieves all comments for a specific task.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: taskId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID of the task.
+ *     responses:
+ *       '200':
+ *         description: A list of comments for the task.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/TaskComment' # Assuming TaskComment schema includes user details
+ *       '403':
+ *         description: Forbidden.
+ *       '404':
+ *         description: Task not found.
+ *       '500':
+ *         description: Internal server error.
+ */
+router.get('/:taskId/comments', async (req: express.Request, res: express.Response) => {
+    try {
+        const { taskId } = req.params;
+        // Authorization: Similar to POST, check if user can view the task
+        const task = await getTaskById(taskId);
+        if (!task) {
+            return res.status(404).json({ message: 'Task not found.' });
+        }
+        // Add authorization checks as needed here.
+
+        const comments = await getTaskComments(taskId);
+        res.status(200).json(comments);
+    } catch (error: any) {
+        console.error('Error fetching task comments:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
 
 // Other task actions like claim, assign, update_details could be added here.
 

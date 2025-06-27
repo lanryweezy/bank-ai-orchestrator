@@ -162,3 +162,36 @@ export const completeTask = async (taskId: string, outputData: Record<string, an
   // This will be handled by workflowRunService.processTaskCompletion(updatedTask)
   return updatedTask;
 };
+
+
+// --- Task Comments ---
+export const taskCommentSchema = z.object({
+    comment_text: z.string().min(1, "Comment text cannot be empty."),
+});
+export type TaskCommentInput = z.infer<typeof taskCommentSchema>;
+
+export const createTaskComment = async (taskId: string, userId: string, commentText: string) => {
+    const result = await query(
+        'INSERT INTO task_comments (task_id, user_id, comment_text) VALUES ($1, $2, $3) RETURNING *',
+        [taskId, userId, commentText]
+    );
+    // Join with user details for immediate display
+    const comment = result.rows[0];
+    const userResult = await query('SELECT username, full_name FROM users WHERE user_id = $1', [comment.user_id]);
+    return {
+        ...comment,
+        user: userResult.rows[0] || { username: 'Unknown User' }
+    };
+};
+
+export const getTaskComments = async (taskId: string) => {
+    const result = await query(
+        `SELECT tc.*, u.username, u.full_name
+         FROM task_comments tc
+         JOIN users u ON tc.user_id = u.user_id
+         WHERE tc.task_id = $1
+         ORDER BY tc.created_at ASC`,
+        [taskId]
+    );
+    return result.rows;
+};

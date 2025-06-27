@@ -38,6 +38,20 @@ export interface WorkflowDefinition {
   updated_at: string;
 }
 
+// For Task Comments
+export interface TaskComment {
+  comment_id: string;
+  task_id: string;
+  user_id: string;
+  comment_text: string;
+  created_at: string;
+  updated_at: string;
+  user?: { // User details are joined from the backend service
+    username: string;
+    full_name?: string | null;
+  };
+}
+
 
 // For Workflow Runs
 export interface WorkflowRun {

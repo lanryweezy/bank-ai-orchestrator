@@ -20,6 +20,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Terminal } from "lucide-react";
+import { format } from 'date-fns'; // Import format function
 
 const TaskManager: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -177,7 +178,10 @@ const TaskManager: React.FC = () => {
                       {task.assigned_to_agent_id && ` (Agent: ${task.assigned_to_agent_id.substring(0,8)}...)`}
                     </p>
                     {task.due_date && (
-                        <p className="text-xs text-gray-500 mt-1">Due: {new Date(task.due_date).toLocaleDateString()}</p>
+                        <p className={`text-xs mt-1 ${new Date(task.due_date) < new Date() && task.status !== 'completed' ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                            Due: {format(new Date(task.due_date), "PPpp")}
+                            {new Date(task.due_date) < new Date() && task.status !== 'completed' && <span className="ml-1">(Overdue)</span>}
+                        </p>
                     )}
                   </div>
                   <div className="flex space-x-2 self-start md:self-center">
