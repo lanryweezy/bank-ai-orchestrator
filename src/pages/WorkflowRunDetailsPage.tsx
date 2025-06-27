@@ -190,6 +190,18 @@ const WorkflowRunDetailsPage: React.FC = () => {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState<boolean>(false);
 
+  // Helper to parse the fully qualified step name for display
+  const getDisplayStepName = (fqStepName: string | null | undefined ): string => {
+    if (!fqStepName) return 'N/A';
+    // Example: "parallelStep.branchName.actualStepName" -> "actualStepName (Branch: branchName)"
+    // This is a simple parser, could be made more robust.
+    const parts = fqStepName.split('.');
+    if (parts.length === 3) { // Assuming parallel.branch.step
+        return `${parts[2]} (Branch: ${parts[1]})`;
+    }
+    return fqStepName; // Return as is if not in the expected parallel format
+  };
+
 
   const fetchRunDetailsAndTasks = useCallback(async () => {
     if (!runId) return;
@@ -312,11 +324,19 @@ const WorkflowRunDetailsPage: React.FC = () => {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <p><strong>Current Step:</strong> {runDetails.current_step_name || 'N/A'}</p>
+                <p><strong>Current Step:</strong> {getDisplayStepName(runDetails.current_step_name)}</p>
                 <p><strong>Started:</strong> {format(new Date(runDetails.start_time), "PPpp")}</p>
                 {runDetails.end_time && <p><strong>Ended:</strong> {format(new Date(runDetails.end_time), "PPpp")}</p>}
                 {runDetails.triggering_user_id && <p><strong>Triggered by:</strong> User {runDetails.triggering_user_id.substring(0,8)}...</p>}
             </div>
+             {runDetails.active_parallel_branches && Object.keys(runDetails.active_parallel_branches).length > 0 && (
+              <div className="mt-2">
+                <h4 className="font-semibold text-sm mb-1">Active Parallel Branches Status:</h4>
+                <pre className="text-xs bg-gray-50 p-3 rounded-md overflow-auto max-h-40">
+                  {JSON.stringify(runDetails.active_parallel_branches, null, 2)}
+                </pre>
+              </div>
+            )}
             {runDetails.triggering_data_json && Object.keys(runDetails.triggering_data_json).length > 0 && (
               <div>
                 <h4 className="font-semibold text-sm mb-1">Triggering Data:</h4>

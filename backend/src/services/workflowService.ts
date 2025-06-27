@@ -2,18 +2,188 @@ import { query } from '../config/db';
 import { z } from 'zod';
 
 // Zod schema for Workflow definition
+
+// Forward declaration for recursive step schema
+const baseWorkflowStepDefinitionSchemaWithoutRef = z.object({
+  name: z.string(),
+  type: z.enum(['agent_execution', 'human_review', 'data_input', 'decision', 'parallel', 'join', 'end']),
+  description: z.string().optional(),
+  agent_core_logic_identifier: z.string().optional(),
+  assigned_role: z.string().optional(),
+  form_schema: z.record(z.any()).optional(),
+  join_on: z.string().optional(), // Name of the join step for a parallel block
+  transitions: z.array(z.object({ // Simplified transition schema for now
+    to: z.string(),
+    condition_type: z.enum(['always', 'on_output_value']).optional(),
+    field: z.string().optional(),
+    operator: z.enum(['==', '!=', '>', '<', '>=', '<=', 'contains', 'not_contains', 'exists', 'not_exists']).optional(),
+    value: z.any().optional(),
+    description: z.string().optional(),
+  })).optional(),
+  final_status: z.enum(['approved', 'rejected', 'completed']).optional(),
+  default_input: z.record(z.any()).optional(),
+  output_namespace: z.string().optional(),
+});
+
+// Define WorkflowBranch schema using a lazy reference for steps within branches
+const workflowBranchSchema: z.ZodType<any> = z.lazy(() =>
+  z.object({
+    name: z.string(),
+    start_step: z.string(),
+    steps: z.array(baseWorkflowStepDefinitionSchema), // Recursive reference here
+  })
+);
+
+// Now define the full step schema including branches
+const baseWorkflowStepDefinitionSchema = baseWorkflowStepDefinitionSchemaWithoutRef.extend({
+  branches: z.array(workflowBranchSchema).optional(),
+});
+
+
+export const workflowDefinitionJsonSchema = z.object({
+  name: z.string().optional(), // Name within JSON, might mirror main workflow name
+  description: z.string().optional(),
+  initialContextSchema: z.record(z.any()).optional(),
+  steps: z.array(baseWorkflowStepDefinitionSchema),
+  start_step: z.string(),
+}).refine(data => { // Validate step names and transitions
+  const stepNames = new Set(data.steps.map(s => s.name));
+  if (!stepNames.has(data.start_step)) {
+    // This refine check might be better placed directly in workflowDefinitionSchema for definition_json
+    // or handled by a dedicated validation function called by the service.
+    // For now, keeping it here as an example of post-parsing validation.
+    // throw new Error(`Start step "${data.start_step}" not found in defined steps.`);
+    // A Zod way: context.addIssue({ code: z.ZodIssueCode.custom, message: "..." })
+    // However, refine at this level doesn't have `context` easily. Better to validate in a separate function.
+    return true; // Placeholder: detailed validation to be done elsewhere or via stricter schema.
+  }
+  for (const step of data.steps) {
+    if (step.transitions) {
+      for (const transition of step.transitions) {
+        if (!stepNames.has(transition.to)) {
+          // throw new Error(`Step "${step.name}" transitions to undefined step "${transition.to}".`);
+          return true; // Placeholder
+        }
+      }
+    }
+    if (step.type === 'parallel') {
+        if (!step.join_on || !stepNames.has(step.join_on)) {
+            // throw new Error(`Parallel step "${step.name}" must have a valid join_on step name.`);
+            return true; // Placeholder
+        }
+        if (!step.branches || step.branches.length < 1) { // Typically expect >= 2 branches, but >=1 for schema
+             // throw new Error(`Parallel step "${step.name}" must have at least one branch defined.`);
+            return true; // Placeholder
+        }
+        for (const branch of step.branches) {
+            if (!branch.steps || branch.steps.length === 0) {
+                // throw new Error(`Branch "${branch.name}" in parallel step "${step.name}" must have at least one step.`);
+                return true; // Placeholder
+            }
+            const branchStepNames = new Set(branch.steps.map(bs => bs.name));
+            if (!branchStepNames.has(branch.start_step)) {
+                 // throw new Error(`Start step "${branch.start_step}" for branch "${branch.name}" not found in branch steps.`);
+                return true; // Placeholder
+            }
+            // Recursively validate steps within branches (Zod handles schema, this is for logic)
+        }
+    }
+  }
+  return true;
+}, { message: "Invalid workflow structure (e.g., missing start step, invalid transitions, parallel/join mismatch)." });
+
+
 export const workflowDefinitionSchema = z.object({
   name: z.string().min(3, "Workflow name must be at least 3 characters"),
   description: z.string().optional(),
-  definition_json: z.record(z.any()), // JSON object defining steps, transitions, etc.
-  version: z.number().int().positive().default(1), // Default version to 1
-  is_active: z.boolean().default(true), // Default to active
+  definition_json: workflowDefinitionJsonSchema, // Use the detailed schema here
+  version: z.number().int().positive().default(1),
+  is_active: z.boolean().default(true),
 });
 export type WorkflowDefinitionInput = z.infer<typeof workflowDefinitionSchema>;
+
+
+// Dedicated validation function for workflow logic (called after Zod schema validation)
+const validateWorkflowLogic = (definitionJson: z.infer<typeof workflowDefinitionJsonSchema>) => {
+    const issues: string[] = [];
+    const allStepNames = new Set(definitionJson.steps.map(s => s.name));
+
+    if (!allStepNames.has(definitionJson.start_step)) {
+        issues.push(`Start step "${definitionJson.start_step}" is not defined in the steps array.`);
+    }
+
+    const validateStepsRecursive = (steps: z.infer<typeof baseWorkflowStepDefinitionSchema>[], contextPath: string) => {
+        for (const step of steps) {
+            const currentPath = `${contextPath}.${step.name}`;
+            // Validate transitions
+            if (step.transitions) {
+                for (const transition of step.transitions) {
+                    if (!allStepNames.has(transition.to)) {
+                        // Check if 'to' is a step within the current branch if applicable (not simple here)
+                        // For now, assume transitions always point to top-level step names
+                        issues.push(`Step "${currentPath}" transitions to an undefined step "${transition.to}".`);
+                    }
+                }
+            }
+
+            // Validate parallel steps
+            if (step.type === 'parallel') {
+                if (!step.join_on || !allStepNames.has(step.join_on)) {
+                    issues.push(`Parallel step "${currentPath}" must have a 'join_on' field referencing a defined top-level step.`);
+                } else {
+                    const joinStep = definitionJson.steps.find(s => s.name === step.join_on);
+                    if (joinStep && joinStep.type !== 'join') {
+                        issues.push(`Step "${step.join_on}" referenced by parallel step "${currentPath}" must be of type "join".`);
+                    }
+                }
+
+                if (!step.branches || step.branches.length < 1) { // Typically want >= 2 branches, but schema allows >=1
+                    issues.push(`Parallel step "${currentPath}" must have at least one branch defined.`);
+                } else {
+                    for (const branch of step.branches) {
+                        const branchPath = `${currentPath}.branch(${branch.name})`;
+                        if (!branch.steps || branch.steps.length === 0) {
+                            issues.push(`Branch "${branch.name}" in parallel step "${currentPath}" must define at least one step.`);
+                            continue;
+                        }
+                        const branchStepNames = new Set(branch.steps.map(bs => bs.name));
+                        if (!branchStepNames.has(branch.start_step)) {
+                            issues.push(`Start step "${branch.start_step}" for branch "${branch.name}" (in "${currentPath}") not found within that branch's defined steps.`);
+                        }
+                        // Validate that last step of each branch transitions to the join_on step
+                        const lastStepInBranch = branch.steps[branch.steps.length -1];
+                        if (!lastStepInBranch.transitions || !lastStepInBranch.transitions.some(t => t.to === step.join_on)) {
+                            issues.push(`The last step ("${lastStepInBranch.name}") of branch "${branch.name}" (in "${currentPath}") must transition to the join step "${step.join_on}".`);
+                        }
+                        validateStepsRecursive(branch.steps, branchPath); // Recursive validation for steps within the branch
+                    }
+                }
+            }
+             // Validate join steps (optional, as their main validation is being correctly targeted)
+            if (step.type === 'join') {
+                // Check if this join step is actually used by any parallel step
+                const isUsedByParallel = definitionJson.steps.some(s => s.type === 'parallel' && s.join_on === step.name);
+                if (!isUsedByParallel) {
+                    issues.push(`Join step "${currentPath}" is defined but not used as a 'join_on' target by any parallel step.`);
+                }
+            }
+        }
+    };
+
+    validateStepsRecursive(definitionJson.steps, 'workflow');
+
+    if (issues.length > 0) {
+        throw new Error(`Workflow definition logical validation failed: ${issues.join('; ')}`);
+    }
+};
+
 
 export const createWorkflowDefinition = async (data: WorkflowDefinitionInput) => {
   // Zod already applies defaults for version and is_active if not provided
   const { name, description, definition_json, version, is_active } = data;
+
+  // Validate workflow logic (transitions, parallel/join structure, etc.)
+  validateWorkflowLogic(definition_json); // This will throw if issues are found
 
   // Check if name + version combination already exists
   const existing = await query(
@@ -92,6 +262,14 @@ export const updateWorkflowDefinition = async (workflowId: string, data: Partial
   if (!currentWorkflow) {
       throw new Error('Workflow definition (version) not found for update.');
   }
+
+  // Validate logic if definition_json is being updated
+  if (data.definition_json) {
+    // The Zod schema for WorkflowDefinitionInput already validates the structure of definition_json.
+    // We need to call our custom logic validator here.
+    validateWorkflowLogic(data.definition_json as z.infer<typeof workflowDefinitionJsonSchema>);
+  }
+
 
   // Fields that can be updated directly on this specific version record
   const allowedUpdateFields: (keyof WorkflowDefinitionInput)[] = ['description', 'definition_json', 'is_active'];

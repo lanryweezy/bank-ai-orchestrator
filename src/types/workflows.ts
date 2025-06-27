@@ -9,17 +9,42 @@ export interface WorkflowStepTransition {
   value?: any; // Value to compare against for operators that require a value
 }
 
-export interface WorkflowStepDefinition {
+// Define a recursive type for steps, as branches can contain steps
+export interface BaseWorkflowStepDefinition {
   name: string;
-  type: 'agent_execution' | 'human_review' | 'data_input' | 'decision' | 'end';
-  agent_core_logic_identifier?: string; // If type is agent_execution
-  // configured_agent_id?: string; // Alternative: directly link to a pre-configured agent
-  assigned_role?: string; // For human tasks, e.g. 'loan_officer'
-  form_schema?: Record<string, any>; // JSON schema for human task input/output
-  transitions: WorkflowStepTransition[];
-  final_status?: 'approved' | 'rejected' | 'completed'; // If type is 'end'
+  type: 'agent_execution' | 'human_review' | 'data_input' | 'decision' | 'parallel' | 'join' | 'end';
+  description?: string; // Optional description for any step type
+  agent_core_logic_identifier?: string; // For agent_execution
+  assigned_role?: string; // For human_review, data_input, decision
+  form_schema?: Record<string, any>; // For human_review, data_input, decision
+
+  // For 'parallel' type
+  branches?: WorkflowBranch[]; // Array of branches, each branch is an array of steps
+  join_on?: string; // Name of the join step this parallel block's branches should eventually transition to
+
+  // For 'join' type
+  // No specific fields needed for 'join' itself, its significance is being a target for parallel branches.
+  // It might have logic to merge outputs, defined by the engine.
+
+  transitions?: WorkflowStepTransition[]; // Not applicable for 'parallel' type direct transitions, but its branches will have them. Not typically used by 'join' either.
+  final_status?: 'approved' | 'rejected' | 'completed'; // For 'end' type
   default_input?: Record<string, any>;
+  output_namespace?: string; // Optional: if a step's output should be namespaced in the context
 }
+
+// A branch is essentially a list of steps
+export interface WorkflowBranch {
+  name: string; // Name for this branch (e.g., "creditCheckBranch", "documentVerificationBranch")
+  start_step: string; // Name of the first step in this branch
+  steps: BaseWorkflowStepDefinition[];
+  // Each branch implicitly transitions to the 'join_on' step specified in the parent 'parallel' step.
+  // Or, the last step in each branch explicitly transitions to the 'join' step.
+}
+
+
+// Make WorkflowStepDefinition use the Base type, but without self-reference issues for simple arrays
+export type WorkflowStepDefinition = BaseWorkflowStepDefinition;
+
 
 export interface WorkflowDefinition {
   workflow_id: string;

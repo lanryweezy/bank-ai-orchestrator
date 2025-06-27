@@ -102,10 +102,11 @@ CREATE TABLE workflow_runs (
     triggering_user_id UUID REFERENCES users(user_id), -- User who initiated the run, if applicable
     triggering_data_json JSONB, -- Initial data that started the workflow
     status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'failed', 'cancelled')),
-    current_step_name VARCHAR(255),
+    current_step_name VARCHAR(255), -- Can be a simple name for non-parallel, or qualified (parallel.branch.step) for parallel
     start_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     end_time TIMESTAMP WITH TIME ZONE,
-    results_json JSONB, -- Final or summary results of the workflow run
+    results_json JSONB, -- Stores accumulated outputs from steps
+    active_parallel_branches JSONB, -- Stores state of active parallel branches: { "parallelStepName": { "branchName": { status, output } } }
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
