@@ -235,44 +235,86 @@ export const processWorkflowStep = async (
     };
 
     if (currentStepDefinition.type === 'agent_execution') {
-      taskData.assigned_to_agent_id = currentStepDefinition.agent_core_logic_identifier; // This needs to be a configured_agent_id
-      // TODO: Map agent_core_logic_identifier to an actual configured_agent_id.
-      // This is a simplification and might require looking up a default agent for that logic, or an error.
-      // For now, assuming agent_core_logic_identifier can be used if no specific agent_id is in definition.
-      // This part of the schema/logic needs refinement for how agents are selected.
+      // TODO: Refine agent selection. This currently assumes agent_core_logic_identifier IS a configured_agent_id.
+      // This needs a lookup mechanism if agent_core_logic_identifier refers to a template.
+      taskData.assigned_to_agent_id = currentStepDefinition.agent_core_logic_identifier;
       if (!taskData.assigned_to_agent_id) {
-         console.error(`Missing agent_core_logic_identifier for agent_execution step ${currentStepDefinition.name}`);
          await updateWorkflowRunStatus(runId, 'failed', displayStepName, { error: `Agent identifier missing for step ${currentStepDefinition.name}` });
          return;
       }
-
       const newTask = await createTask(taskData);
-      try {
-        const agentResult = await executeAgent(taskData.assigned_to_agent_id, taskData.input_data_json);
-        const agentOutput = agentResult.output || agentResult; // Adapt based on executeAgent's return
-        await completeTaskInService(newTask.task_id, agentOutput);
+      // Execute agent and then process next step
+      executeAgent(taskData.assigned_to_agent_id, taskData.input_data_json)
+        .then(agentResult => {
+            const agentOutput = agentResult.output || agentResult;
+            completeTaskInService(newTask.task_id, agentOutput); // Complete the agent task
+            return processWorkflowStep(runId, newTask.task_id, agentOutput, branchContext);
+        })
+        .catch(async agentError => {
+            await updateTaskStatus(newTask.task_id, 'failed', { error: agentError.message });
+            await updateWorkflowRunStatus(runId, 'failed', displayStepName, { error: `Agent execution failed for step ${currentStepDefinition.name}: ${agentError.message}` });
+        });
 
-        // Process next step in the current context (main or branch)
-        await processWorkflowStep(runId, newTask.task_id, agentOutput, branchContext);
-      } catch (agentError: any) {
-        await updateTaskStatus(newTask.task_id, 'failed', { error: agentError.message });
-        await updateWorkflowRunStatus(runId, 'failed', displayStepName, { error: `Agent execution failed for step ${currentStepDefinition.name}: ${agentError.message}` });
-      }
-    } else { // Human tasks
+    } else if (['human_review', 'data_input', 'decision'].includes(currentStepDefinition.type)) {
       taskData.assigned_to_user_id = currentStepDefinition.assigned_to_user_id || null;
       taskData.assigned_to_role = currentStepDefinition.assigned_to_role || null;
-      await createTask(taskData);
+      await createTask(taskData); // Create task, workflow pauses here until task is completed via API
       console.log(`Human task '${displayStepName}' created for run ${runId}.`);
-    }
-  } else if (currentStepDefinition.type === 'end') {
-    console.log(`Processing END step: ${currentStepDefinition.name} for run ${runId}`);
-    const finalStatus = currentStepDefinition.final_status || 'completed';
-    await updateWorkflowRunStatus(runId, finalStatus, displayStepName, accumulatedContext);
-    console.log(`Workflow run ${runId} reached end state '${finalStatus}' at step ${currentStepDefinition.name}.`);
 
-  } else {
-    await updateWorkflowRunStatus(runId, 'failed', displayStepName, { error: `Unknown task type '${currentStepDefinition.type}' for step ${currentStepDefinition.name}.` });
-  }
+    } else if (currentStepDefinition.type === 'sub_workflow') {
+        console.log(`Processing SUB_WORKFLOW step: ${currentStepDefinition.name} for run ${runId}`);
+        const { sub_workflow_name, sub_workflow_version, input_mapping, output_namespace } = currentStepDefinition;
+
+        if (!sub_workflow_name) {
+            await updateWorkflowRunStatus(runId, 'failed', displayStepName, { error: `Sub-workflow step "${currentStepDefinition.name}" is missing 'sub_workflow_name'.` });
+            return;
+        }
+
+        const subWorkflowDef = await getWorkflowDefinitionByNameAndVersion(sub_workflow_name, sub_workflow_version);
+        if (!subWorkflowDef) {
+            await updateWorkflowRunStatus(runId, 'failed', displayStepName, { error: `Sub-workflow definition "${sub_workflow_name}" (version: ${sub_workflow_version || 'latest active'}) not found or not active.` });
+            return;
+        }
+
+        let subWorkflowInputs = { ...accumulatedContext }; // Default to pass all current context
+        if (input_mapping) {
+            subWorkflowInputs = {};
+            for (const key in input_mapping) {
+                // Path is dot-notation from accumulatedContext
+                const value = getNestedValue(accumulatedContext, input_mapping[key]);
+                if (value !== undefined) {
+                    subWorkflowInputs[key] = value;
+                } else {
+                    console.warn(`Input mapping for sub-workflow: key "${input_mapping[key]}" not found in parent context for step "${currentStepDefinition.name}".`);
+                }
+            }
+        }
+
+        // Create the task for the sub_workflow step in parent workflow FIRST
+        const parentSubWorkflowTask = await createTask({ ...taskData, type: 'sub_workflow' });
+
+        try {
+            const subRun = await createWorkflowRun(subWorkflowDef.workflow_id, run.triggering_user_id, subWorkflowInputs);
+            // Link parent task to sub-run
+            await query('UPDATE tasks SET sub_workflow_run_id = $1 WHERE task_id = $2', [subRun.run_id, parentSubWorkflowTask.task_id]);
+            console.log(`Sub-workflow ${sub_workflow_name} (Run ID: ${subRun.run_id}) started for parent task ${parentSubWorkflowTask.task_id}. Parent run ${runId} now waiting.`);
+            // Parent workflow now waits. Sub-workflow completion will trigger continuation.
+            // For now, this means this path of processWorkflowStep ends.
+            // A separate mechanism (e.g. polling or callback) will eventually call processWorkflowStep for the parent again.
+        } catch (subRunError: any) {
+            console.error(`Failed to start sub-workflow ${sub_workflow_name}:`, subRunError);
+            await updateTaskStatus(parentSubWorkflowTask.task_id, 'failed', { error: `Failed to start sub-workflow: ${subRunError.message}` });
+            await updateWorkflowRunStatus(runId, 'failed', displayStepName, { error: `Failed to start sub-workflow "${sub_workflow_name}" for step "${currentStepDefinition.name}".` });
+        }
+
+    } else if (currentStepDefinition.type === 'end') {
+        console.log(`Processing END step: ${currentStepDefinition.name} for run ${runId}`);
+        const finalStatus = currentStepDefinition.final_status || 'completed';
+        await updateWorkflowRunStatus(runId, finalStatus, displayStepName, accumulatedContext);
+        console.log(`Workflow run ${runId} reached end state '${finalStatus}' at step ${currentStepDefinition.name}.`);
+    } else {
+        await updateWorkflowRunStatus(runId, 'failed', displayStepName, { error: `Unknown task type '${currentStepDefinition.type}' for step ${currentStepDefinition.name}.` });
+    }
 };
 
 

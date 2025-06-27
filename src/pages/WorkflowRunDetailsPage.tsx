@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom'; // Added Link
 import Layout from '@/components/Layout';
 import apiClient from '@/services/apiClient';
-import { WorkflowRun, Task, TaskComment } from '@/types/workflows'; // Added TaskComment
+import { WorkflowRun, Task, TaskComment } from '@/types/workflows';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,9 +10,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Terminal, ListChecks, CheckCircle, Clock, AlertCircle, MessageSquare, Send, UserCircle } from "lucide-react"; // Added icons
-import { format, formatDistanceToNow } from 'date-fns'; // Added formatDistanceToNow
-import TaskActionModal from '@/components/TaskActionModal'; // This modal will now also host comments
+import { ArrowLeft, Terminal, ListChecks, CheckCircle, Clock, AlertCircle, MessageSquare, Send, UserCircle, ExternalLink, GitMerge } from "lucide-react"; // Added ExternalLink, GitMerge
+import { format, formatDistanceToNow } from 'date-fns';
+import TaskActionModal from '@/components/TaskActionModal';
 
 
 // Component for displaying a single task card with its comments
@@ -22,6 +22,7 @@ interface TaskCardProps {
 }
 
 const TaskCard: React.FC<TaskCardProps> = ({ task, onViewAction }) => {
+  const navigate = useNavigate(); // For linking to sub-workflow run
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [newComment, setNewComment] = useState<string>('');
   const [loadingComments, setLoadingComments] = useState<boolean>(false);
@@ -30,7 +31,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onViewAction }) => {
   const [showComments, setShowComments] = useState<boolean>(false);
 
   const fetchComments = useCallback(async () => {
-    if (!task) return;
+    if (!task || task.type === 'sub_workflow') return; // Don't fetch comments for sub_workflow task itself
     setLoadingComments(true);
     setCommentError(null);
     try {
@@ -45,13 +46,13 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onViewAction }) => {
   }, [task]);
 
   useEffect(() => {
-    if (showComments) {
+    if (showComments && task.type !== 'sub_workflow') {
       fetchComments();
     }
-  }, [showComments, fetchComments]);
+  }, [showComments, fetchComments, task.type]);
 
   const handleAddComment = async () => {
-    if (!newComment.trim() || !task) return;
+    if (!newComment.trim() || !task || task.type === 'sub_workflow') return;
     setIsSubmittingComment(true);
     setCommentError(null);
     try {
@@ -80,6 +81,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onViewAction }) => {
   };
 
   const getStatusIcon = (status: Task['status']) => {
+    if (task.type === 'sub_workflow') return <GitMerge className="h-4 w-4 text-purple-500" />;
     switch (status) {
       case 'completed': return <CheckCircle className="h-4 w-4 text-green-500" />;
       case 'in_progress': return <Clock className="h-4 w-4 text-blue-500" />;
@@ -90,7 +92,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onViewAction }) => {
   };
 
   return (
-    <Card>
+    <Card className={task.type === 'sub_workflow' ? 'bg-purple-50 border-purple-200' : ''}>
       <CardHeader className="pb-3">
         <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-2">
           <div>
@@ -98,7 +100,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onViewAction }) => {
               {getStatusIcon(task.status)}
               <span className="ml-2">{task.step_name_in_workflow}</span>
             </h4>
-            <p className="text-xs text-gray-500 ml-6">Task ID: {task.task_id.substring(0,8)}... | Type: {task.type}</p>
+            <p className="text-xs text-gray-500 ml-6">Task ID: {task.task_id.substring(0,8)}... | Type: <span className="font-semibold">{task.type}</span></p>
           </div>
           <Badge variant={getStatusBadgeVariant(task.status)} className="text-xs self-start sm:self-auto mt-1 sm:mt-0">{task.status}</Badge>
         </div>
@@ -110,6 +112,14 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onViewAction }) => {
                 {new Date(task.due_date) < new Date() && task.status !== 'completed' &&
                     <span className="text-red-500 font-semibold ml-1">(Overdue)</span>}
             </p>
+        )}
+        {task.type === 'sub_workflow' && task.sub_workflow_run_id && (
+          <div className="mt-2">
+            <Button size="sm" variant="outline" onClick={() => navigate(`/workflow-runs/${task.sub_workflow_run_id}`)}>
+              View Sub-Workflow Run <ExternalLink className="h-3 w-3 ml-1.5"/>
+            </Button>
+             <p className="text-xs text-gray-500 mt-1">Sub-Run ID: {task.sub_workflow_run_id.substring(0,8)}...</p>
+          </div>
         )}
         {(task.type === 'human_review' || task.type === 'data_input' || task.type === 'decision') && task.status !== 'completed' && (
           <div className="mt-2">
@@ -127,52 +137,54 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onViewAction }) => {
           </details>
         )}
       </CardContent>
-      <CardFooter className="flex flex-col items-start pt-3 border-t">
-        <Button variant="link" size="sm" onClick={() => setShowComments(!showComments)} className="px-0 py-1 text-blue-600 hover:text-blue-800">
-          <MessageSquare className="h-4 w-4 mr-1.5" /> {showComments ? 'Hide Comments' : `Show Comments (${loadingComments ? '...' : comments.length})`}
-        </Button>
-        {showComments && (
-          <div className="w-full mt-2 space-y-3">
-            {loadingComments && <Skeleton className="h-10 w-full" />}
-            {commentError && <Alert variant="destructive" className="text-xs p-2"><AlertDescription>{commentError}</AlertDescription></Alert>}
-            {!loadingComments && !commentError && comments.length === 0 && <p className="text-xs text-gray-500 italic">No comments for this task.</p>}
-            {!loadingComments && !commentError && comments.length > 0 && (
-              <div className="space-y-2 max-h-48 overflow-y-auto bg-slate-50 p-2 rounded-md">
-                {comments.map(comment => (
-                  <div key={comment.comment_id} className="text-xs p-2 bg-white rounded shadow-sm border">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <p className="font-semibold text-blue-700 flex items-center">
-                        <UserCircle className="h-3.5 w-3.5 mr-1 text-gray-400"/>
-                        {comment.user?.full_name || comment.user?.username || 'User'}
-                      </p>
-                      <p className="text-xxs text-gray-400" title={new Date(comment.created_at).toLocaleString()}>
-                        {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
-                      </p>
+      {task.type !== 'sub_workflow' && ( // Comments section not shown for sub_workflow placeholder tasks
+        <CardFooter className="flex flex-col items-start pt-3 border-t">
+            <Button variant="link" size="sm" onClick={() => setShowComments(!showComments)} className="px-0 py-1 text-blue-600 hover:text-blue-800">
+            <MessageSquare className="h-4 w-4 mr-1.5" /> {showComments ? 'Hide Comments' : `Show Comments (${loadingComments ? '...' : comments.length})`}
+            </Button>
+            {showComments && (
+            <div className="w-full mt-2 space-y-3">
+                {loadingComments && <Skeleton className="h-10 w-full" />}
+                {commentError && <Alert variant="destructive" className="text-xs p-2"><AlertDescription>{commentError}</AlertDescription></Alert>}
+                {!loadingComments && !commentError && comments.length === 0 && <p className="text-xs text-gray-500 italic">No comments for this task.</p>}
+                {!loadingComments && !commentError && comments.length > 0 && (
+                <div className="space-y-2 max-h-48 overflow-y-auto bg-slate-50 p-2 rounded-md">
+                    {comments.map(comment => (
+                    <div key={comment.comment_id} className="text-xs p-2 bg-white rounded shadow-sm border">
+                        <div className="flex items-center justify-between mb-0.5">
+                        <p className="font-semibold text-blue-700 flex items-center">
+                            <UserCircle className="h-3.5 w-3.5 mr-1 text-gray-400"/>
+                            {comment.user?.full_name || comment.user?.username || 'User'}
+                        </p>
+                        <p className="text-xxs text-gray-400" title={new Date(comment.created_at).toLocaleString()}>
+                            {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
+                        </p>
+                        </div>
+                        <p className="text-gray-700 whitespace-pre-wrap">{comment.comment_text}</p>
                     </div>
-                    <p className="text-gray-700 whitespace-pre-wrap">{comment.comment_text}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="mt-2 space-y-1">
-              <Label htmlFor={`newComment-${task.task_id}`} className="text-xs font-semibold">Add comment:</Label>
-              <div className="flex items-start space-x-1.5">
-                <Textarea
-                  id={`newComment-${task.task_id}`}
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Type comment..."
-                  rows={1}
-                  className="flex-grow text-xs"
-                />
-                <Button type="button" size="sm" onClick={handleAddComment} disabled={isSubmittingComment || !newComment.trim()} className="bg-blue-600 hover:bg-blue-700 text-white h-auto py-1.5 px-2.5">
-                  <Send className="h-3.5 w-3.5" />
-                </Button>
-              </div>
+                    ))}
+                </div>
+                )}
+                <div className="mt-2 space-y-1">
+                <Label htmlFor={`newComment-${task.task_id}`} className="text-xs font-semibold">Add comment:</Label>
+                <div className="flex items-start space-x-1.5">
+                    <Textarea
+                    id={`newComment-${task.task_id}`}
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    placeholder="Type comment..."
+                    rows={1}
+                    className="flex-grow text-xs"
+                    />
+                    <Button type="button" size="sm" onClick={handleAddComment} disabled={isSubmittingComment || !newComment.trim()} className="bg-blue-600 hover:bg-blue-700 text-white h-auto py-1.5 px-2.5">
+                    <Send className="h-3.5 w-3.5" />
+                    </Button>
+                </div>
+                </div>
             </div>
-          </div>
-        )}
-      </CardFooter>
+            )}
+        </CardFooter>
+      )}
     </Card>
   );
 };

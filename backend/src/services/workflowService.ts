@@ -6,13 +6,22 @@ import { z } from 'zod';
 // Forward declaration for recursive step schema
 const baseWorkflowStepDefinitionSchemaWithoutRef = z.object({
   name: z.string(),
-  type: z.enum(['agent_execution', 'human_review', 'data_input', 'decision', 'parallel', 'join', 'end']),
+  type: z.enum(['agent_execution', 'human_review', 'data_input', 'decision', 'parallel', 'join', 'end', 'sub_workflow']), // Added sub_workflow
   description: z.string().optional(),
-  agent_core_logic_identifier: z.string().optional(),
-  assigned_role: z.string().optional(),
-  form_schema: z.record(z.any()).optional(),
-  join_on: z.string().optional(), // Name of the join step for a parallel block
-  transitions: z.array(z.object({ // Simplified transition schema for now
+  agent_core_logic_identifier: z.string().optional(), // For agent_execution
+  assigned_role: z.string().optional(), // For human_review, data_input, decision
+  form_schema: z.record(z.any()).optional(), // For human_review, data_input, decision
+
+  // For 'parallel' type
+  join_on: z.string().optional(),
+
+  // For 'sub_workflow' type
+  sub_workflow_name: z.string().optional(),
+  sub_workflow_version: z.number().int().positive().optional(),
+  input_mapping: z.record(z.string()).optional(), // e.g. {"subWorkflowVar": "parentContext.valueToMap"}
+
+  // Common fields
+  transitions: z.array(z.object({
     to: z.string(),
     condition_type: z.enum(['always', 'on_output_value']).optional(),
     field: z.string().optional(),
@@ -164,8 +173,21 @@ const validateWorkflowLogic = (definitionJson: z.infer<typeof workflowDefinition
                 // Check if this join step is actually used by any parallel step
                 const isUsedByParallel = definitionJson.steps.some(s => s.type === 'parallel' && s.join_on === step.name);
                 if (!isUsedByParallel) {
+                    // This might be a soft warning rather than a hard error, as a join step could be temporarily orphaned during editing.
+                    // For now, let's make it an issue.
                     issues.push(`Join step "${currentPath}" is defined but not used as a 'join_on' target by any parallel step.`);
                 }
+            }
+
+            // Validate sub_workflow steps
+            if (step.type === 'sub_workflow') {
+                if (!step.sub_workflow_name) {
+                    issues.push(`Sub-workflow step "${currentPath}" must have a 'sub_workflow_name' defined.`);
+                }
+                // Optional: Could add a check here to see if the named sub-workflow (and version, if specified)
+                // actually exists in the database. This might be too slow for real-time validation in an editor
+                // and could make definitions too tightly coupled during design time.
+                // For now, just ensuring the field is present.
             }
         }
     };

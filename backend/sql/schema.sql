@@ -135,14 +135,18 @@ CREATE TABLE tasks (
     input_data_json JSONB, -- Data required for the task
     output_data_json JSONB, -- Result of the task
     due_date TIMESTAMP WITH TIME ZONE,
+    sub_workflow_run_id UUID NULL REFERENCES workflow_runs(run_id), -- For tasks of type 'sub_workflow'
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_task_assignment CHECK (
         (type = 'agent_execution' AND assigned_to_agent_id IS NOT NULL AND assigned_to_user_id IS NULL AND assigned_to_role IS NULL) OR
-        (type <> 'agent_execution' AND assigned_to_agent_id IS NULL AND (assigned_to_user_id IS NOT NULL OR assigned_to_role IS NOT NULL)) OR
-        (type <> 'agent_execution' AND assigned_to_agent_id IS NULL AND assigned_to_user_id IS NULL AND assigned_to_role IS NULL) -- e.g. pending assignment to be picked from a queue
+        (type = 'sub_workflow') OR -- Sub-workflow tasks are not directly assigned to users/agents in the parent
+        (type NOT IN ('agent_execution', 'sub_workflow') AND assigned_to_agent_id IS NULL AND (assigned_to_user_id IS NOT NULL OR assigned_to_role IS NOT NULL)) OR
+        (type NOT IN ('agent_execution', 'sub_workflow') AND assigned_to_agent_id IS NULL AND assigned_to_user_id IS NULL AND assigned_to_role IS NULL) -- e.g. pending assignment
     )
 );
+
+CREATE INDEX idx_tasks_sub_workflow_run_id ON tasks(sub_workflow_run_id);
 
 CREATE TRIGGER update_tasks_updated_at
 BEFORE UPDATE ON tasks
