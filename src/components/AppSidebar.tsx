@@ -3,12 +3,12 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   Bot, 
-  Users, 
-  Brain, 
-  Database, 
-  Mail, 
-  Activity, 
-  Settings, 
+  Users,
+  Brain,
+  Database,
+  Mail,
+  Activity,
+  Settings,
   Building2,
   Zap,
   BarChart3,
@@ -20,7 +20,8 @@ import {
   CreditCard,
   ArrowRightLeft,
   UserCheck,
-  Cpu
+  Cpu,
+  SlidersHorizontal // Icon for Admin stuff
 } from 'lucide-react';
 import {
   Sidebar,
@@ -58,8 +59,21 @@ const bankingModules = [
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
+// Helper to get user role - replace with your actual auth context or service
+const getUserRole = () => localStorage.getItem('userRole');
+
+
 export function AppSidebar() {
   const location = useLocation();
+  const userRole = getUserRole();
+
+  // Admin navigation items
+  const adminNavigation = [
+    { name: 'Agent Templates', href: '/admin/agent-templates', icon: SlidersHorizontal },
+    // Add more admin links here, e.g., Workflow Definitions Admin
+    // { name: 'Workflow Definitions', href: '/admin/workflow-definitions', icon: GitBranch },
+  ];
+
 
   return (
     <Sidebar className="w-64">
@@ -79,7 +93,7 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {navigation.map((item) => {
-                const isActive = location.pathname === item.href;
+                const isActive = location.pathname === item.href || (item.href !== '/' && location.pathname.startsWith(item.href));
                 return (
                   <SidebarMenuItem key={item.name}>
                     <SidebarMenuButton asChild isActive={isActive}>
@@ -100,7 +114,7 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {bankingModules.map((item) => {
-                const isActive = location.pathname === item.href;
+                const isActive = location.pathname === item.href || (item.href !== '/' && location.pathname.startsWith(item.href));
                 return (
                   <SidebarMenuItem key={item.name}>
                     <SidebarMenuButton asChild isActive={isActive}>
@@ -115,6 +129,29 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {userRole === 'platform_admin' && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Administration</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {adminNavigation.map((item) => {
+                  const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/');
+                  return (
+                    <SidebarMenuItem key={item.name}>
+                      <SidebarMenuButton asChild isActive={isActive}>
+                        <Link to={item.href} className="flex items-center">
+                          <item.icon className="mr-3 h-5 w-5" />
+                          <span>{item.name}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="p-4">

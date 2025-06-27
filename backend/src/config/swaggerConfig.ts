@@ -10,18 +10,18 @@ const options: swaggerJsdoc.Options = {
       description: 'API documentation for the AI Agent Management and Workflow Automation Platform for Banks.',
       contact: {
         name: 'API Support',
-        url: 'http://www.example.com/support', // Replace with actual support URL
-        email: 'support@example.com', // Replace with actual support email
+        url: 'https://lovable.dev',
+        email: 'support@lovable.dev',
       },
     },
     servers: [
       {
-        url: `http://localhost:${serverConfig.port}/api`, // Adjust if your API base path is different
-        description: 'Development server',
+        url: `http://localhost:${serverConfig.port}/api`,
+        description: 'Development server (backend)',
       },
-      // Add more servers (e.g., staging, production) as needed
+      // Example for a deployed server:
       // {
-      //   url: `https://api.yourbank.com/v1`,
+      //   url: `https://your-deployed-app-url.com/api`,
       //   description: 'Production server',
       // }
     ],

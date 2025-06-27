@@ -16,35 +16,41 @@ app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
 // API Documentation Route (Swagger UI)
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec)); // Added
+// Make sure swaggerConfig includes schemas for AgentTemplateInput, ErrorResponse, AgentTemplate
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Simple route for testing
 app.get('/api/health', (req, res) => {
   res.json({ status: 'Backend is healthy', timestamp: new Date().toISOString() });
 });
 
+// Import Routes
 import authRoutes from './api/auth/authRoutes';
-import agentTemplateAdminRoutes from './api/admin/agentTemplateAdminRoutes';
-import agentTemplateRoutes from './api/agentTemplates/agentTemplateRoutes';
+import agentTemplateUserRoutes from './api/agentTemplates/agentTemplateRoutes'; // Renamed for clarity
 import configuredAgentRoutes from './api/configuredAgents/configuredAgentRoutes';
-import workflowAdminRoutes from './api/admin/workflowAdminRoutes';
-import workflowRoutes from './api/workflows/workflowRoutes';
+import workflowUserRoutes from './api/workflows/workflowRoutes'; // Renamed for clarity
 import workflowRunRoutes from './api/workflowRuns/workflowRunRoutes';
 import taskRoutes from './api/tasks/taskRoutes';
+
+// Admin Routes
+import agentTemplateAdminRoutes from './api/admin/agentTemplateAdminRoutes';
+import workflowAdminRoutes from './api/admin/workflowAdminRoutes';
+
 
 // Mount auth routes
 app.use('/api/auth', authRoutes);
 
-// Mount Agent Management Routes
-app.use('/api/admin/agent-templates', agentTemplateAdminRoutes); // Admin routes for templates
-app.use('/api/agent-templates', agentTemplateRoutes); // Public/user routes for templates
-app.use('/api/configured-agents', configuredAgentRoutes); // User routes for their configured agents
+// Mount User-Facing Routes
+app.use('/api/agent-templates', agentTemplateUserRoutes);
+app.use('/api/configured-agents', configuredAgentRoutes);
+app.use('/api/workflows', workflowUserRoutes);
+app.use('/api/workflow-runs', workflowRunRoutes);
+app.use('/api/tasks', taskRoutes);
 
-// Mount Workflow Engine Routes
-app.use('/api/admin/workflows', workflowAdminRoutes); // Admin routes for workflow definitions
-app.use('/api/workflows', workflowRoutes); // User routes for workflow definitions and starting runs
-app.use('/api/workflow-runs', workflowRunRoutes); // User routes for viewing workflow runs
-app.use('/api/tasks', taskRoutes); // User routes for managing their tasks
+// Mount Admin Routes (ensure these are appropriately protected by middleware inside the route files)
+app.use('/api/admin/agent-templates', agentTemplateAdminRoutes);
+app.use('/api/admin/workflows', workflowAdminRoutes);
+
 
 // Seed initial data (for development convenience)
 import { seedInitialAgentTemplates } from './services/agentTemplateService';

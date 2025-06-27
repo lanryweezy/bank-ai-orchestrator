@@ -1,25 +1,34 @@
 import * as express from 'express';
 import { ZodError } from 'zod';
-import { agentTemplateSchema, createAgentTemplate, updateAgentTemplate, deleteAgentTemplate, getAgentTemplateById } from '../../services/agentTemplateService';
+import {
+  agentTemplateSchema,
+  createAgentTemplate,
+  getAllAgentTemplates,
+  getAgentTemplateById,
+  updateAgentTemplate,
+  deleteAgentTemplate
+} from '../../services/agentTemplateService';
 import { authenticateToken, isPlatformAdmin } from '../../middleware/authMiddleware';
 
 const router = express.Router();
 
+// All routes in this file are protected and require platform_admin role
+router.use(authenticateToken, isPlatformAdmin);
+
 /**
  * @openapi
  * tags:
- *   name: Agent Templates (Admin)
- *   description: Administration of Agent Templates (requires platform_admin role)
+ *   name: Admin - Agent Templates
+ *   description: Manage Agent Templates (Admin access required)
  */
-router.use(authenticateToken, isPlatformAdmin); // Apply to all routes in this file
 
 /**
  * @openapi
  * /admin/agent-templates:
  *   post:
- *     tags: [Agent Templates (Admin)]
+ *     tags: [Admin - Agent Templates]
  *     summary: Create a new agent template
- *     description: Allows platform admins to define new agent templates.
+ *     description: Adds a new agent template to the system. Requires platform_admin role.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -36,111 +45,251 @@ router.use(authenticateToken, isPlatformAdmin); // Apply to all routes in this f
  *             schema:
  *               $ref: '#/components/schemas/AgentTemplate'
  *       '400':
- *         description: Validation failed or invalid input.
+ *         description: Invalid input data.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       '401':
- *         description: Unauthorized (token missing or invalid).
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         description: Unauthorized.
  *       '403':
- *         description: Forbidden (user does not have platform_admin role).
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         description: Forbidden (user is not a platform_admin).
  *       '409':
- *         description: Conflict (e.g., template with this name already exists).
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         description: Conflict (e.g., template name already exists).
  *       '500':
  *         description: Internal server error.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/', async (req: express.Request, res: express.Response) => {
   try {
     const data = agentTemplateSchema.parse(req.body);
-    const template = await createAgentTemplate(data);
-    res.status(201).json(template);
+    const newTemplate = await createAgentTemplate(data);
+    res.status(201).json(newTemplate);
   } catch (error: any) {
     if (error instanceof ZodError) {
       return res.status(400).json({ message: 'Validation failed', errors: error.errors });
     }
-    if (error.message.includes('duplicate key value violates unique constraint "agent_templates_name_key"')) {
-        return res.status(409).json({ message: 'Agent template with this name already exists.' });
+    // Handle potential unique constraint errors from DB, e.g., duplicate name
+    if (error.code === '23505' && error.constraint === 'agent_templates_name_key') {
+        return res.status(409).json({ message: `Agent template with name '${req.body.name}' already exists.`});
     }
     console.error('Error creating agent template:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
 
-// PUT /api/admin/agent-templates/:templateId - Update an agent template
-router.put('/:templateId', async (req: express.Request, res: express.Response) => {
+/**
+ * @openapi
+ * /admin/agent-templates:
+ *   get:
+ *     tags: [Admin - Agent Templates]
+ *     summary: List all agent templates (admin)
+ *     description: Retrieves a comprehensive list of all agent templates. Requires platform_admin role.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       '200':
+ *         description: A list of all agent templates.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/AgentTemplate'
+ *       '401':
+ *         description: Unauthorized.
+ *       '403':
+ *         description: Forbidden.
+ *       '500':
+ *         description: Internal server error.
+ */
+router.get('/', async (req: express.Request, res: express.Response) => {
   try {
-    const data = agentTemplateSchema.partial().parse(req.body); // Allow partial updates
-    if (Object.keys(data).length === 0) {
-        return res.status(400).json({ message: "No update fields provided." });
-    }
-    const template = await updateAgentTemplate(req.params.templateId, data);
+    const templates = await getAllAgentTemplates(); // Service function already gets all
+    res.status(200).json(templates);
+  } catch (error) {
+    console.error('Error fetching all agent templates for admin:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+/**
+ * @openapi
+ * /admin/agent-templates/{templateId}:
+ *   get:
+ *     tags: [Admin - Agent Templates]
+ *     summary: Get a specific agent template by ID (admin)
+ *     description: Retrieves details of a specific agent template by its ID. Requires platform_admin role.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: templateId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The ID of the agent template to retrieve.
+ *     responses:
+ *       '200':
+ *         description: Agent template details.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AgentTemplate'
+ *       '404':
+ *         description: Agent template not found.
+ *       '401':
+ *         description: Unauthorized.
+ *       '403':
+ *         description: Forbidden.
+ *       '500':
+ *         description: Internal server error.
+ */
+router.get('/:templateId', async (req: express.Request, res: express.Response) => {
+  try {
+    const template = await getAgentTemplateById(req.params.templateId);
     if (!template) {
       return res.status(404).json({ message: 'Agent template not found' });
     }
     res.status(200).json(template);
+  } catch (error) {
+    console.error('Error fetching agent template by ID for admin:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+/**
+ * @openapi
+ * /admin/agent-templates/{templateId}:
+ *   put:
+ *     tags: [Admin - Agent Templates]
+ *     summary: Update an existing agent template
+ *     description: Modifies an existing agent template. Requires platform_admin role.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: templateId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The ID of the agent template to update.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/AgentTemplateInput'
+ *     responses:
+ *       '200':
+ *         description: Agent template updated successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AgentTemplate'
+ *       '400':
+ *         description: Invalid input data.
+ *       '404':
+ *         description: Agent template not found.
+ *       '401':
+ *         description: Unauthorized.
+ *       '403':
+ *         description: Forbidden.
+ *       '409':
+ *         description: Conflict (e.g., template name already exists for another record).
+ *       '500':
+ *         description: Internal server error.
+ */
+router.put('/:templateId', async (req: express.Request, res: express.Response) => {
+  try {
+    // agentTemplateSchema will validate the entire object for replacement.
+    // For partial updates, use agentTemplateSchema.partial().
+    // Given it's an admin UI form, full update is acceptable.
+    const data = agentTemplateSchema.parse(req.body);
+    const updatedTemplate = await updateAgentTemplate(req.params.templateId, data);
+    if (!updatedTemplate) {
+      return res.status(404).json({ message: 'Agent template not found or update failed' });
+    }
+    res.status(200).json(updatedTemplate);
   } catch (error: any) {
     if (error instanceof ZodError) {
       return res.status(400).json({ message: 'Validation failed', errors: error.errors });
     }
-    if (error.message.includes('duplicate key value violates unique constraint "agent_templates_name_key"')) {
-        return res.status(409).json({ message: 'Agent template with this name already exists.' });
+    if (error.code === '23505' && error.constraint === 'agent_templates_name_key') {
+        return res.status(409).json({ message: `Agent template with name '${req.body.name}' already exists for another template.`});
     }
     console.error('Error updating agent template:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
 
-// DELETE /api/admin/agent-templates/:templateId - Delete an agent template
+/**
+ * @openapi
+ * /admin/agent-templates/{templateId}:
+ *   delete:
+ *     tags: [Admin - Agent Templates]
+ *     summary: Delete an agent template
+ *     description: Removes an agent template from the system. Requires platform_admin role.
+ *                  Caution: This can affect configured agents using this template.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: templateId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The ID of the agent template to delete.
+ *     responses:
+ *       '200':
+ *         description: Agent template deleted successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 template:
+ *                   $ref: '#/components/schemas/AgentTemplate'
+ *       '404':
+ *         description: Agent template not found.
+ *       '401':
+ *         description: Unauthorized.
+ *       '403':
+ *         description: Forbidden.
+ *       '409':
+ *         description: Conflict - template in use by configured agents.
+ *       '500':
+ *         description: Internal server error.
+ */
 router.delete('/:templateId', async (req: express.Request, res: express.Response) => {
   try {
-    const template = await deleteAgentTemplate(req.params.templateId);
-    if (!template) {
+    // Future enhancement: Check if the template is used by any configured_agents.
+    // const configuredAgents = await query('SELECT 1 FROM configured_agents WHERE template_id = $1 LIMIT 1', [req.params.templateId]);
+    // if (configuredAgents.rows.length > 0) {
+    //   return res.status(409).json({ message: 'Conflict: Agent template is currently in use by configured agents and cannot be deleted.' });
+    // }
+
+    const deletedTemplate = await deleteAgentTemplate(req.params.templateId);
+    if (!deletedTemplate) {
       return res.status(404).json({ message: 'Agent template not found' });
     }
-    // Check for configured_agents using this template before deleting? Or handle with DB constraints (ON DELETE RESTRICT)
-    // For now, simple delete. DB schema for configured_agents.template_id does not have ON DELETE CASCADE/SET NULL.
-    // It has `REFERENCES agent_templates(template_id)` which defaults to ON DELETE RESTRICT.
-    // So, if any configured_agent uses it, this delete will fail at DB level.
-    res.status(200).json({ message: 'Agent template deleted successfully', template });
+    res.status(200).json({ message: 'Agent template deleted successfully', template: deletedTemplate });
   } catch (error: any) {
-     if (error.message.includes('violates foreign key constraint "configured_agents_template_id_fkey"')) {
-        return res.status(409).json({ message: 'Cannot delete template: It is currently in use by configured agents.' });
+    // Handle foreign key constraint violation if a configured agent still uses this template
+    // The specific error code and constraint name might vary slightly by PostgreSQL version or exact schema.
+    // '23503' is foreign_key_violation. 'configured_agents_template_id_fkey' is the typical constraint name.
+    if (error.code === '23503' && error.constraint === 'configured_agents_template_id_fkey') {
+        return res.status(409).json({
+            message: 'Conflict: This agent template is currently in use by one or more configured agents. Please delete or reassign those agents before deleting this template.'
+        });
     }
     console.error('Error deleting agent template:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
-
-// GET /api/admin/agent-templates/:templateId - Get a specific template (admin view, might be same as public)
-router.get('/:templateId', async (req: express.Request, res: express.Response) => {
-    try {
-        const template = await getAgentTemplateById(req.params.templateId);
-        if (!template) {
-        return res.status(404).json({ message: 'Agent template not found' });
-        }
-        res.status(200).json(template);
-    } catch (error) {
-        console.error('Error fetching agent template:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
-});
-
 
 export default router;
