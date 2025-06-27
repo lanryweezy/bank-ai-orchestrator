@@ -12,14 +12,26 @@ export const workflowDefinitionSchema = z.object({
 export type WorkflowDefinitionInput = z.infer<typeof workflowDefinitionSchema>;
 
 export const createWorkflowDefinition = async (data: WorkflowDefinitionInput) => {
-  const { name, description, definition_json, version, is_active } = data;
-  // Check if name + version combination already exists
-  const existing = await query(
-    'SELECT workflow_id FROM workflows WHERE name = $1 AND version = $2',
-    [name, version]
-  );
-  if (existing.rows.length > 0) {
-    throw new Error(`Workflow with name "${name}" and version ${version} already exists.`);
+  const { name, description, definition_json, version = 1, is_active = true } = data;
+
+  // For creating the first version, ensure name doesn't exist with version 1
+  if (version === 1) {
+    const existingV1 = await query('SELECT workflow_id FROM workflows WHERE name = $1 AND version = 1', [name]);
+    if (existingV1.rows.length > 0) {
+      throw new Error(`Workflow with name "${name}" and version 1 already exists. Use createNewWorkflowVersion to create subsequent versions.`);
+    }
+  } else {
+    // This function should primarily be for version 1. Creating other versions should use createNewWorkflowVersion.
+    // Or, if allowing direct creation of higher versions, ensure the name/version combo is unique.
+     const existing = await query('SELECT workflow_id FROM workflows WHERE name = $1 AND version = $2', [name, version]);
+     if (existing.rows.length > 0) {
+        throw new Error(`Workflow with name "${name}" and version ${version} already exists.`);
+     }
+  }
+
+  if (is_active) {
+    // Deactivate other active versions of the same name
+    await query('UPDATE workflows SET is_active = false WHERE name = $1 AND is_active = true', [name]);
   }
 
   const result = await query(
@@ -34,6 +46,7 @@ export const getWorkflowDefinitionById = async (workflowId: string) => {
   return result.rows[0] || null;
 };
 
+// Get specific active version by name and version number
 export const getWorkflowDefinitionByNameAndVersion = async (name: string, version?: number) => {
   if (version) {
     const result = await query('SELECT * FROM workflows WHERE name = $1 AND version = $2 AND is_active = true', [name, version]);
@@ -44,44 +57,66 @@ export const getWorkflowDefinitionByNameAndVersion = async (name: string, versio
   return result.rows[0] || null;
 };
 
+// Get all versions of a workflow by name
+export const getAllWorkflowDefinitionsByName = async (name: string) => {
+  const result = await query('SELECT * FROM workflows WHERE name = $1 ORDER BY version DESC', [name]);
+  return result.rows;
+};
+
+
 export const getAllWorkflowDefinitions = async (onlyActive: boolean = false) => {
+  // This might need refinement. Do we list all versions of all workflows? Or just latest active of each name?
+  // For admin list, maybe all versions. For user list, latest active of each name.
+  // Current implementation lists all records.
   let queryString = 'SELECT * FROM workflows ORDER BY name ASC, version DESC';
   if (onlyActive) {
-    queryString = 'SELECT * FROM workflows WHERE is_active = true ORDER BY name ASC, version DESC';
+    // If onlyActive, we should probably get the latest active version for each distinct name
+    queryString = `
+      SELECT w1.*
+      FROM workflows w1
+      INNER JOIN (
+          SELECT name, MAX(version) as max_version
+          FROM workflows
+          WHERE is_active = true
+          GROUP BY name
+      ) w2 ON w1.name = w2.name AND w1.version = w2.max_version
+      WHERE w1.is_active = true
+      ORDER BY w1.name ASC;
+    `;
+     const result = await query(queryString);
+     return result.rows;
   }
+  // If not onlyActive (typically for admin views), return all versions of all workflows
   const result = await query(queryString);
   return result.rows;
 };
 
+// Updates a specific workflow definition record (a specific version)
 export const updateWorkflowDefinition = async (workflowId: string, data: Partial<WorkflowDefinitionInput>) => {
-  const fields = Object.keys(data) as (keyof Partial<WorkflowDefinitionInput>)[];
-  const values = Object.values(data);
+  const { name, version, ...updateData } = data; // Destructure to prevent name/version changes here
 
-  if (fields.length === 0) {
+  if (Object.keys(updateData).length === 0) {
     return getWorkflowDefinitionById(workflowId);
   }
 
-  // Prevent changing name and version directly if it causes conflict, or handle as new version.
-  // For simplicity, this update won't allow changing name/version here; create new version instead.
-  if (data.name || data.version) {
-      // If name or version is part of the update, ensure it doesn't clash
-      const currentWorkflow = await getWorkflowDefinitionById(workflowId);
-      if (!currentWorkflow) throw new Error('Workflow not found for update.');
-
-      const checkName = data.name || currentWorkflow.name;
-      const checkVersion = data.version || currentWorkflow.version;
-
-      if (data.name !== currentWorkflow.name || data.version !== currentWorkflow.version) {
-        const existing = await query(
-            'SELECT workflow_id FROM workflows WHERE name = $1 AND version = $2 AND workflow_id != $3',
-            [checkName, checkVersion, workflowId]
-        );
-        if (existing.rows.length > 0) {
-            throw new Error(`Another workflow with name "${checkName}" and version ${checkVersion} already exists.`);
-        }
-      }
+  const currentWorkflow = await getWorkflowDefinitionById(workflowId);
+  if (!currentWorkflow) {
+      throw new Error('Workflow (version) not found for update.');
   }
 
+  // If this version is being activated, deactivate other versions of the same name
+  if (updateData.is_active === true && currentWorkflow.is_active === false) {
+    await query(
+      'UPDATE workflows SET is_active = false WHERE name = $1 AND workflow_id != $2 AND is_active = true',
+      [currentWorkflow.name, workflowId]
+    );
+  }
+  // Prevent deactivating the only active version of a workflow name if there are other versions
+  // This rule might be too strict or complex for now, consider implications.
+  // For now, allow deactivation even if it's the last active one.
+
+  const fields = Object.keys(updateData) as (keyof typeof updateData)[];
+  const values = Object.values(updateData);
 
   const setClauses = fields.map((field, index) => `"${field}" = $${index + 2}`).join(', ');
   const queryString = `UPDATE workflows SET ${setClauses} WHERE workflow_id = $1 RETURNING *`;
@@ -90,14 +125,78 @@ export const updateWorkflowDefinition = async (workflowId: string, data: Partial
   return result.rows[0] || null;
 };
 
-// Deleting a workflow definition can be complex due to existing runs.
-// Usually, it's better to mark as inactive.
+
+export const createNewWorkflowVersion = async (
+    baseWorkflowName: string, // Name of the workflow to create a new version for
+    newVersionData: Partial<WorkflowDefinitionInput> // description, definition_json, is_active for the new version
+) => {
+    const latestVersionResult = await query(
+        'SELECT MAX(version) as max_version FROM workflows WHERE name = $1',
+        [baseWorkflowName]
+    );
+
+    let nextVersion = 1;
+    if (latestVersionResult.rows.length > 0 && latestVersionResult.rows[0].max_version !== null) {
+        nextVersion = latestVersionResult.rows[0].max_version + 1;
+    } else {
+      // This means no workflow with this name exists yet.
+      // This function is for creating a *new version* of an *existing* workflow name.
+      // If you want to create the first version, use createWorkflowDefinition.
+      // However, we can adapt it to create V1 if no workflow with that name exists.
+      // For now, let's assume baseWorkflowName must exist if we are creating a "new version".
+      // If we want this to also create V1, then need to fetch base data differently or require it in newVersionData
+      const baseWorkflow = await query('SELECT * FROM workflows WHERE name = $1 ORDER BY version DESC LIMIT 1', [baseWorkflowName]);
+      if(baseWorkflow.rows.length === 0 && nextVersion === 1) {
+        // Allow creating version 1 if the name doesn't exist at all
+      } else if (baseWorkflow.rows.length === 0) {
+         throw new Error(`Workflow with name "${baseWorkflowName}" not found to create a new version from.`);
+      }
+    }
+
+    const {
+        description = null, // Default to null or copy from previous if desired
+        definition_json = {}, // Default to empty or copy
+        is_active = true, // New versions are typically active by default
+    } = newVersionData;
+
+    // If new version is active, deactivate other versions of the same name
+    if (is_active) {
+        await query('UPDATE workflows SET is_active = false WHERE name = $1 AND is_active = true', [baseWorkflowName]);
+    }
+
+    const result = await query(
+        'INSERT INTO workflows (name, description, definition_json, version, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [baseWorkflowName, description, definition_json, nextVersion, is_active]
+    );
+    return result.rows[0];
+};
+
+
+export const activateWorkflowVersion = async (workflowId: string) => {
+    const workflowToActivate = await getWorkflowDefinitionById(workflowId);
+    if (!workflowToActivate) {
+        throw new Error('Workflow version not found.');
+    }
+
+    // Deactivate other versions of the same name
+    await query(
+        'UPDATE workflows SET is_active = false WHERE name = $1 AND workflow_id != $2 AND is_active = true',
+        [workflowToActivate.name, workflowId]
+    );
+
+    // Activate the target version
+    const result = await query(
+        'UPDATE workflows SET is_active = true WHERE workflow_id = $1 RETURNING *',
+        [workflowId]
+    );
+    return result.rows[0];
+};
+
+
+// Deleting a workflow definition (a specific version) can be complex.
 export const DANGEROUS_deleteWorkflowDefinition = async (workflowId: string) => {
-  // Check for active workflow_runs before deleting
-  // const runs = await query('SELECT run_id FROM workflow_runs WHERE workflow_id = $1 AND status NOT IN ($2, $3)', [workflowId, 'completed', 'failed']);
-  // if (runs.rows.length > 0) {
-  //   throw new Error('Cannot delete workflow definition: Active runs exist. Mark as inactive instead.');
-  // }
+  // Add checks: e.g., cannot delete the only version, or the only active version if others exist.
+  // For now, direct delete of the specific version record.
   const result = await query('DELETE FROM workflows WHERE workflow_id = $1 RETURNING *', [workflowId]);
   return result.rows[0] || null;
 };

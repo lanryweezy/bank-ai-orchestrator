@@ -70,8 +70,7 @@ export function AppSidebar() {
   // Admin navigation items
   const adminNavigation = [
     { name: 'Agent Templates', href: '/admin/agent-templates', icon: SlidersHorizontal },
-    // Add more admin links here, e.g., Workflow Definitions Admin
-    // { name: 'Workflow Definitions', href: '/admin/workflow-definitions', icon: GitBranch },
+    { name: 'Workflow Definitions', href: '/admin/workflow-definitions', icon: GitBranch },
   ];
 
 

@@ -28,7 +28,9 @@ import { Navigate } from "react-router-dom";
 
 // Admin Pages
 import AgentTemplatesListPageAdmin from "./pages/Admin/AgentTemplatesListPage";
-import AgentTemplateEditPage from "./pages/Admin/AgentTemplateEditPage"; // Import the new page
+import AgentTemplateEditPage from "./pages/Admin/AgentTemplateEditPage";
+import WorkflowDefinitionsListPageAdmin from "./pages/Admin/WorkflowDefinitionsListPage";
+import WorkflowDefinitionEditPage from "./pages/Admin/WorkflowDefinitionEditPage"; // Import new page
 
 
 const queryClient = new QueryClient();
@@ -116,6 +118,38 @@ const App = () => (
             element={
               <ProtectedRoute allowedRoles={['platform_admin']}>
                 <AgentTemplateEditPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/workflow-definitions"
+            element={
+              <ProtectedRoute allowedRoles={['platform_admin']}>
+                <WorkflowDefinitionsListPageAdmin />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/workflow-definitions/new"
+            element={
+              <ProtectedRoute allowedRoles={['platform_admin']}>
+                <WorkflowDefinitionEditPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/workflow-definitions/edit/:workflowId"
+            element={
+              <ProtectedRoute allowedRoles={['platform_admin']}>
+                <WorkflowDefinitionEditPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/workflow-definitions/new-version/:workflowName"
+            element={
+              <ProtectedRoute allowedRoles={['platform_admin']}>
+                <WorkflowDefinitionEditPage /> {/* Re-use edit page, it will need to handle this mode */}
               </ProtectedRoute>
             }
           />
