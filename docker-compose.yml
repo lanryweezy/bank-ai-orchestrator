@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: . # Context is the root of the project
+      dockerfile: backend/Dockerfile # Path to the backend Dockerfile
+    ports:
+      - "${BACKEND_PORT:-3001}:${BACKEND_PORT:-3001}" # Use .env variable or default
+    volumes:
+      # Mount src code for development to enable hot-reloading if nodemon is used inside container
+      # For production, you wouldn't mount the source code like this.
+      # The Dockerfile already handles building and copying code.
+      # This volume mount is more for a dev setup if you run the dev server in Docker.
+      # However, the current backend/Dockerfile is geared towards a production build.
+      # To use this for dev with nodemon:
+      # 1. CMD in backend/Dockerfile should be `npm run dev:backend`
+      # 2. Ensure nodemon is part of dependencies, not just devDependencies, or install devDeps in Docker.
+      # For now, this compose file assumes a production-like image from backend/Dockerfile.
+      - ./backend/src:/usr/src/app/backend/src # Example if you wanted live reload in container
+      - ./dist/backend:/usr/src/app/dist/backend # Or mount the compiled output
+    env_file:
+      - ./backend/.env # Load environment variables from backend/.env
+    environment:
+      # Override or set additional environment variables here if needed
+      NODE_ENV: ${NODE_ENV:-development} # Default to development if not set in .env
+      DB_HOST: postgres_db # Service name of the postgres container
+      # DB_USER, DB_PASSWORD, DB_NAME, DB_PORT should come from backend/.env
+    depends_on:
+      - postgres_db
+    networks:
+      - bankapp_network
+
+  postgres_db:
+    image: postgres:15-alpine
+    ports:
+      - "${DB_PORT_EXTERNAL:-5433}:${DB_PORT:-5432}" # Expose DB on 5433 externally, 5432 internally
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persist database data
+      - ./backend/sql/schema.sql:/docker-entrypoint-initdb.d/init.sql # Initialize DB with schema
+    environment:
+      POSTGRES_USER: ${DB_USER:-bankuser} # Use from .env or default
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-bankpassword} # Use from .env or default
+      POSTGRES_DB: ${DB_NAME:-bank_db} # Use from .env or default
+    networks:
+      - bankapp_network
+
+volumes:
+  postgres_data: # Named volume for PostgreSQL data persistence
+
+networks:
+  bankapp_network:
+    driver: bridge
