@@ -82,8 +82,34 @@ export const updateWorkflowRunStatus = async (runId: string, status: string, cur
   const setClauses = fields.map((field, index) => `"${field}" = $${index + 2}`).join(', ');
 
   const queryString = `UPDATE workflow_runs SET ${setClauses} WHERE run_id = $1 RETURNING *`;
-  const result = await query(queryString, [runId, ...values]);
-  return result.rows[0];
+  const updatedRunResult = await query(queryString, [runId, ...values]);
+  const updatedRun = updatedRunResult.rows[0];
+
+  // If the run that just got updated to a terminal status (completed/failed) was a sub-workflow,
+  // we need to trigger the resumption of its parent workflow.
+  if (updatedRun && (updatedRun.status === 'completed' || updatedRun.status === 'failed')) {
+    // Check if this run_id is referenced as a sub_workflow_run_id in any task
+    const parentTaskResult = await query(
+        `SELECT task_id, run_id as parent_run_id
+         FROM tasks
+         WHERE sub_workflow_run_id = $1 AND status NOT IN ('completed', 'failed')`, // Find the parent task that's waiting
+        [runId]
+    );
+    if (parentTaskResult.rows.length > 0) {
+      const parentTask = parentTaskResult.rows[0];
+      console.log(`Sub-workflow run ${runId} has finished with status ${updatedRun.status}. Resuming parent run ${parentTask.parent_run_id}, task ${parentTask.task_id}.`);
+
+      // Mark the parent's sub-workflow task as completed/failed and pass the sub-run's results.
+      // This will then call processWorkflowStep for the parent run.
+      await processTaskCompletionAndContinueWorkflow(
+        parentTask.task_id,
+        updatedRun.results_json || { error: `Sub-workflow ${runId} ended with status ${updatedRun.status}` },
+        null, // No specific completing user for system-triggered task completion
+        updatedRun.status // Pass the sub-workflow's terminal status to the parent task
+      );
+    }
+  }
+  return updatedRun;
 };
 
 // Helper to merge outputs, simple overwrite for now, specific keys for branches
@@ -421,21 +447,32 @@ export const updateTaskStatus = async (taskId: string, status: string, outputDat
     return result.rows[0];
 };
 
-// This function is called when a task (usually human) is completed via API
-export const processTaskCompletionAndContinueWorkflow = async (taskId: string, outputData: Record<string, any>, completingUserId?: string) => {
-    const completedTask = await completeTaskInService(taskId, outputData, completingUserId);
+// This function is called when a task (usually human, or system for sub-workflow placeholder) is completed
+export const processTaskCompletionAndContinueWorkflow = async (
+    taskId: string,
+    outputData: Record<string, any>,
+    completingUserId?: string | null, // Can be null if system completes it (e.g. sub-workflow)
+    taskFinalStatus?: 'completed' | 'failed' // Explicit status for sub-workflow tasks
+) => {
+    let completedTask = await getTaskById(taskId);
     if (!completedTask) {
-        throw new Error("Task completion failed or task not found.");
+        throw new Error(`Task ${taskId} not found during completion process.`);
     }
 
-    // Determine if this task was part of a branch
-    // This is a placeholder: In a real system, task_context_json or another field in the task
-    // would store { parallelStepName, branchName, joinStepName } if it's a branch task.
-    // For now, we assume it's not a branch task for simplicity in this function.
-    // If it were a branch task, the branchContext would need to be retrieved and passed.
+    // If taskFinalStatus is provided (typically for sub-workflow system completion), use it.
+    // Otherwise, default to 'completed'.
+    const statusToSet = taskFinalStatus || 'completed';
+
+    completedTask = await completeTaskInService(taskId, outputData, completingUserId, statusToSet);
+    if (!completedTask) { // Should not happen if getTaskById found it, but defensive
+        throw new Error(`Task ${taskId} completion failed unexpectedly in service.`);
+    }
+
+    // Determine if this task was part of a branch - placeholder for now
     // const taskContext = completedTask.task_context_json as any;
     // const branchContext = taskContext?.branch;
 
+    // Crucially, pass the task_id of the task that just completed as triggeringTaskId
     await processWorkflowStep(completedTask.run_id, completedTask.task_id, completedTask.output_data_json /*, branchContext */);
     return completedTask;
 };

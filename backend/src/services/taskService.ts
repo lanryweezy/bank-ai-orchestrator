@@ -17,12 +17,13 @@ export type TaskInput = z.infer<typeof taskInputSchema>;
 export interface TaskCreationData {
   run_id: string;
   step_name_in_workflow: string;
-  type: 'agent_execution' | 'human_review' | 'data_input' | 'decision';
+  type: 'agent_execution' | 'human_review' | 'data_input' | 'decision' | 'sub_workflow'; // Added sub_workflow
   assigned_to_agent_id?: string | null;
   assigned_to_user_id?: string | null;
-  assigned_to_role?: string | null; // Added
+  assigned_to_role?: string | null;
   input_data_json?: Record<string, any> | null;
-  due_date?: string | null; // ISO string
+  due_date?: string | null;
+  // sub_workflow_run_id is set after creation via an update if type is 'sub_workflow'
 }
 
 export const createTask = async (data: TaskCreationData) => {
@@ -135,31 +136,43 @@ export const updateTask = async (taskId: string, data: Partial<TaskInput>) => {
 };
 
 // This is a critical function, as completing a task often triggers workflow progression.
-export const completeTask = async (taskId: string, outputData: Record<string, any>, completingUserId?: string) => {
+export const completeTask = async (
+    taskId: string,
+    outputData: Record<string, any>,
+    completingUserId?: string | null,
+    finalStatus: 'completed' | 'failed' = 'completed' // Allow specifying 'failed' for system updates like sub-workflow
+) => {
   const task = await getTaskById(taskId);
   if (!task) {
-    throw new Error('Task not found.');
+    throw new Error(`Task ${taskId} not found.`);
   }
-  if (task.status === 'completed') {
-    // Or just return the task? For now, throw error if trying to re-complete.
-    throw new Error('Task is already completed.');
+  // Allow re-completion if status is 'failed' and we are trying to mark it 'failed' again (idempotency for system)
+  // Or if trying to mark a non-terminal task as 'failed' by system
+  if (task.status === 'completed' && finalStatus === 'completed') {
+     console.warn(`Task ${taskId} is already completed. Returning current state.`);
+     return task;
+    // For human actions, might throw: throw new Error('Task is already completed.');
   }
-  // Authorization: Ensure the completingUserId is the assigned_to_user_id or has permission
-  if (task.assigned_to_user_id && task.assigned_to_user_id !== completingUserId) {
-      // Add role-based override here if e.g. an admin can complete tasks for others
-      // For now, strict check.
-      // throw new Error('User not authorized to complete this task.');
-      console.warn(`Task ${taskId} completed by ${completingUserId} but assigned to ${task.assigned_to_user_id}`);
+  if (task.status === 'failed' && finalStatus === 'failed') {
+    console.warn(`Task ${taskId} is already failed. Returning current state.`);
+    return task;
   }
 
+  // Authorization for human completion
+  if (completingUserId && task.assigned_to_user_id && task.assigned_to_user_id !== completingUserId) {
+      // TODO: Add role-based override for admins/managers if needed
+      console.warn(`User ${completingUserId} attempting to complete task ${taskId} assigned to ${task.assigned_to_user_id}.`);
+      // For now, we allow this but log it. Stricter systems might throw an error.
+      // throw new Error('User not authorized to complete this task.');
+  }
 
   const updatedTask = await updateTask(taskId, {
-    status: 'completed',
+    status: finalStatus,
     output_data_json: outputData,
   });
 
   // Placeholder: Notify workflow engine that task is complete to process next steps
-  // This will be handled by workflowRunService.processTaskCompletion(updatedTask)
+  // This will be handled by workflowRunService.processTaskCompletionAndContinueWorkflow
   return updatedTask;
 };
 
