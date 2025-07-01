@@ -227,7 +227,22 @@ const options: swaggerJsdoc.Options = {
                     }
                 }
             }
+        },
+        Notification: {
+            type: 'object',
+            properties: {
+                notification_id: { type: 'string', format: 'uuid', readOnly: true },
+                user_id: { type: 'string', format: 'uuid', readOnly: true },
+                type: { type: 'string', example: 'task_assigned' },
+                message: { type: 'string', example: 'You have been assigned a new task.' },
+                related_entity_type: { type: 'string', nullable: true, example: 'task' },
+                related_entity_id: { type: 'string', format: 'uuid', nullable: true },
+                is_read: { type: 'boolean', readOnly: true },
+                created_at: { type: 'string', format: 'date-time', readOnly: true },
+                read_at: { type: 'string', format: 'date-time', nullable: true, readOnly: true },
+            }
         }
+        // Add TaskCommentInput and TaskComment schemas if not already present from previous features
       },
       securitySchemes: { // Define security schemes (e.g., Bearer token for JWT)
         bearerAuth: {

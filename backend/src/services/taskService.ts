@@ -70,7 +70,43 @@ export const createTask = async (data: TaskCreationData) => {
       initialStatus
     ]
   );
-  return result.rows[0];
+  const newTask = result.rows[0];
+
+  // --- Notification Logic ---
+  // Only send notification if it's a human task directly assigned to a user
+  if (newTask && newTask.assigned_to_user_id &&
+      (newTask.type === 'human_review' || newTask.type === 'data_input' || newTask.type === 'decision')) {
+
+    // Dynamically import to avoid circular dependency if notificationService imports taskService
+    const notificationService = await import('./notificationService');
+
+    // Get workflow name for a more descriptive message
+    let workflowName = 'a workflow';
+    try {
+        const runDetails = await query('SELECT w.name FROM workflow_runs wr JOIN workflows w ON wr.workflow_id = w.workflow_id WHERE wr.run_id = $1', [newTask.run_id]);
+        if (runDetails.rows.length > 0) {
+            workflowName = `workflow "${runDetails.rows[0].name}"`;
+        }
+    } catch (e) { console.error("Error fetching workflow name for notification:", e); }
+
+    await notificationService.createNotification({
+      user_id: newTask.assigned_to_user_id,
+      type: 'task_assigned',
+      message: `You have been assigned a new task: "${newTask.step_name_in_workflow}" in ${workflowName}.`,
+      related_entity_type: 'task',
+      related_entity_id: newTask.task_id
+    }).catch(err => {
+      // Log error but don't let notification failure stop task creation
+      console.error(`Failed to create task assignment notification for task ${newTask.task_id} to user ${newTask.assigned_to_user_id}:`, err);
+    });
+  }
+  // TODO: Consider notifications for role-based assignments. This would involve:
+  // 1. Querying all users with the assigned_to_role.
+  // 2. Creating notifications for each of them.
+  // This could be a significant number of notifications, so might need batching or a different strategy.
+  // For now, only direct user assignments trigger notifications.
+
+  return newTask;
 };
 
 export const getTaskById = async (taskId: string) => {

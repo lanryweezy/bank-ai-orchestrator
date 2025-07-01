@@ -180,6 +180,29 @@ CREATE INDEX idx_task_comments_task_id ON task_comments(task_id);
 CREATE INDEX idx_task_comments_user_id ON task_comments(user_id);
 
 
+-- Notifications Table
+CREATE TABLE notifications (
+    notification_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE, -- Recipient
+    type VARCHAR(50) NOT NULL, -- e.g., 'task_assigned', 'workflow_completed', 'mention'
+    message TEXT NOT NULL,
+    related_entity_type VARCHAR(50), -- e.g., 'task', 'workflow_run'
+    related_entity_id UUID,
+    is_read BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    read_at TIMESTAMP WITH TIME ZONE,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP -- For the notification record itself
+);
+
+CREATE TRIGGER update_notifications_updated_at
+BEFORE UPDATE ON notifications
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE INDEX idx_notifications_user_id_is_read_created_at ON notifications(user_id, is_read, created_at DESC);
+CREATE INDEX idx_notifications_related_entity ON notifications(related_entity_type, related_entity_id);
+
+
 -- Note: The chk_task_assignment constraint might need refinement based on exact assignment logic.
 -- For example, a human task might initially be unassigned or assigned to a group/role.
 -- The current constraint is a basic example.
