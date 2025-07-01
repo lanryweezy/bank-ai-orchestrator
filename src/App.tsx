@@ -30,7 +30,8 @@ import { Navigate } from "react-router-dom";
 import AgentTemplatesListPageAdmin from "./pages/Admin/AgentTemplatesListPage";
 import AgentTemplateEditPage from "./pages/Admin/AgentTemplateEditPage";
 import WorkflowDefinitionsListPageAdmin from "./pages/Admin/WorkflowDefinitionsListPage";
-import WorkflowDefinitionEditPage from "./pages/Admin/WorkflowDefinitionEditPage"; // Import new page
+import WorkflowDefinitionEditPage from "./pages/Admin/WorkflowDefinitionEditPage";
+import AgentMonitoringPage from "./pages/Admin/AgentMonitoringPage"; // Import the new page
 
 
 const queryClient = new QueryClient();
@@ -158,6 +159,14 @@ const App = () => (
             element={
               <ProtectedRoute allowedRoles={['platform_admin']}>
                 <WorkflowDefinitionEditPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/agent-monitoring"
+            element={
+              <ProtectedRoute allowedRoles={['platform_admin']}>
+                <AgentMonitoringPage />
               </ProtectedRoute>
             }
           />

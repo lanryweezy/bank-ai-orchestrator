@@ -21,7 +21,8 @@ import {
   ArrowRightLeft,
   UserCheck,
   Cpu,
-  SlidersHorizontal // Icon for Admin stuff
+  SlidersHorizontal, // Icon for Admin stuff
+  ActivitySquare // Icon for Agent Monitoring
 } from 'lucide-react';
 import {
   Sidebar,
@@ -71,6 +72,7 @@ export function AppSidebar() {
   const adminNavigation = [
     { name: 'Agent Templates', href: '/admin/agent-templates', icon: SlidersHorizontal },
     { name: 'Workflow Definitions', href: '/admin/workflow-definitions', icon: GitBranch },
+    { name: 'Agent Monitoring', href: '/admin/agent-monitoring', icon: ActivitySquare },
   ];
 
 
