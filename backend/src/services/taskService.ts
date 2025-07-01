@@ -208,3 +208,44 @@ export const getTaskComments = async (taskId: string) => {
     );
     return result.rows;
 };
+
+export const getTaskSummaryForUser = async (userId: string, userRole: string, limit: number = 5) => {
+    // Get counts by status
+    const statusCountsQuery = `
+        SELECT status, COUNT(*) as count
+        FROM tasks
+        WHERE (assigned_to_user_id = $1 OR assigned_to_role = $2)
+          AND type != 'agent_execution' AND type != 'sub_workflow'
+          AND status IN ('pending', 'assigned', 'in_progress')
+        GROUP BY status;
+    `;
+    const statusCountsResult = await query(statusCountsQuery, [userId, userRole]);
+    const counts = statusCountsResult.rows.reduce((acc, row) => {
+        acc[row.status] = parseInt(row.count, 10);
+        return acc;
+    }, {});
+
+    // Get recent (or high-priority if priority field existed) tasks that are not completed/failed
+    const recentTasksQuery = `
+        SELECT t.task_id, t.step_name_in_workflow, t.status, t.due_date, t.created_at, w.name as workflow_name
+        FROM tasks t
+        JOIN workflow_runs wr ON t.run_id = wr.run_id
+        JOIN workflows w ON wr.workflow_id = w.workflow_id
+        WHERE (t.assigned_to_user_id = $1 OR t.assigned_to_role = $2)
+          AND t.type != 'agent_execution' AND t.type != 'sub_workflow'
+          AND t.status NOT IN ('completed', 'failed', 'skipped')
+        ORDER BY t.due_date ASC NULLS LAST, t.created_at DESC
+        LIMIT $3;
+    `;
+    // Prioritize by due date soonest, then by most recently created
+    const recentTasksResult = await query(recentTasksQuery, [userId, userRole, limit]);
+
+    return {
+        counts: {
+            pending: counts.pending || 0,
+            assigned: counts.assigned || 0,
+            in_progress: counts.in_progress || 0,
+        },
+        recent_tasks: recentTasksResult.rows
+    };
+};

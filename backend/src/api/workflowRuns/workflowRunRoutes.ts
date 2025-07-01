@@ -55,4 +55,64 @@ router.get('/:runId', isBankUser, async (req: express.Request, res: express.Resp
 
 // Potentially add routes for cancelling a run, retrying a failed step, etc. later.
 
+/**
+ * @openapi
+ * /workflow-runs/summary:
+ *   get:
+ *     tags: [Workflow Runs]
+ *     summary: Get summary of recent workflow runs for the user
+ *     description: Retrieves a list of recent workflow runs relevant to the authenticated user. Platform admins see all recent runs.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 5
+ *         description: Number of recent runs to return.
+ *     responses:
+ *       '200':
+ *         description: Workflow run summary retrieved successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object # Define a minimal WorkflowRunSummaryItem schema
+ *                 properties:
+ *                   run_id: { type: string, format: uuid }
+ *                   workflow_name: { type: string }
+ *                   status: { type: string }
+ *                   start_time: { type: string, format: date-time }
+ *                   current_step_name: {type: string, nullable: true }
+ *                   triggering_username: {type: string, nullable: true }
+ *       '500':
+ *         description: Internal server error.
+ */
+router.get('/summary', isBankUser, async (req: express.Request, res: express.Response) => { // Applied isBankUser middleware here
+    try {
+        const userId = req.user!.userId;
+        const userRole = req.user!.role;
+        const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 5;
+
+        if (isNaN(limit) || limit <= 0) {
+            return res.status(400).json({ message: "Invalid limit parameter." });
+        }
+
+        let runs;
+        if (userRole === 'platform_admin') {
+            runs = await getAllRecentWorkflowRuns(limit);
+        } else {
+            runs = await getRecentWorkflowRunsForUser(userId, limit);
+        }
+
+        res.status(200).json(runs);
+    } catch (error) {
+        console.error('Error fetching workflow run summary:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
+
 export default router;

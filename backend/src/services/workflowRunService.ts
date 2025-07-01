@@ -261,16 +261,41 @@ export const processWorkflowStep = async (
     };
 
     if (currentStepDefinition.type === 'agent_execution') {
-      // TODO: Refine agent selection. This currently assumes agent_core_logic_identifier IS a configured_agent_id.
-      // This needs a lookup mechanism if agent_core_logic_identifier refers to a template.
-      taskData.assigned_to_agent_id = currentStepDefinition.agent_core_logic_identifier;
-      if (!taskData.assigned_to_agent_id) {
-         await updateWorkflowRunStatus(runId, 'failed', displayStepName, { error: `Agent identifier missing for step ${currentStepDefinition.name}` });
+  // Dynamic Agent Selection Logic for 'agent_execution' steps:
+  let agentToExecuteId = currentStepDefinition.configured_agent_id; // 1. Try direct assignment
+
+  if (!agentToExecuteId && currentStepDefinition.agent_selection_criteria) { // 2. Try dynamic selection
+    const { findConfiguredAgentByCriteria } = await import('./configuredAgentService'); // Dynamic import to avoid circular deps at module load time
+    const selectedAgent = await findConfiguredAgentByCriteria(
+        currentStepDefinition.agent_selection_criteria,
+        run.triggering_user_id ?? undefined // Pass user context for agent selection
+    );
+    if (selectedAgent) {
+        agentToExecuteId = selectedAgent.agent_id;
+        console.log(`Dynamically selected agent ${agentToExecuteId} for step ${currentStepDefinition.name} based on criteria.`);
+    } else {
+        await updateWorkflowRunStatus(runId, 'failed', displayStepName, { error: `No configured agent found matching criteria for step ${currentStepDefinition.name}` });
+        return;
+    }
+  } else if (!agentToExecuteId && currentStepDefinition.agent_core_logic_identifier) {
+    // 3. Fallback/Legacy: Interpret agent_core_logic_identifier as a direct configured_agent_id
+    // This path is ambiguous. Ideally, workflow definitions should be clear:
+    // - `configured_agent_id` for fixed assignment.
+    // - `agent_selection_criteria` for dynamic assignment of an *instance*.
+    // - `agent_core_logic_identifier` might be used if we had logic to find/create an instance from a *template* on the fly (more complex).
+    console.warn(`Using 'agent_core_logic_identifier' (${currentStepDefinition.agent_core_logic_identifier}) as a direct configured_agent_id for step ${currentStepDefinition.name}. Consider using 'configured_agent_id' or 'agent_selection_criteria'.`);
+    agentToExecuteId = currentStepDefinition.agent_core_logic_identifier;
+  }
+
+  if (!agentToExecuteId) {
+     await updateWorkflowRunStatus(runId, 'failed', displayStepName, { error: `Agent could not be determined for step ${currentStepDefinition.name}` });
          return;
       }
+  taskData.assigned_to_agent_id = agentToExecuteId;
+
       const newTask = await createTask(taskData);
       // Execute agent and then process next step
-      executeAgent(taskData.assigned_to_agent_id, taskData.input_data_json)
+  executeAgent(agentToExecuteId, taskData.input_data_json)
         .then(agentResult => {
             const agentOutput = agentResult.output || agentResult;
             completeTaskInService(newTask.task_id, agentOutput); // Complete the agent task
@@ -341,6 +366,37 @@ export const processWorkflowStep = async (
     } else {
         await updateWorkflowRunStatus(runId, 'failed', displayStepName, { error: `Unknown task type '${currentStepDefinition.type}' for step ${currentStepDefinition.name}.` });
     }
+};
+
+export const getRecentWorkflowRunsForUser = async (userId: string, limit: number = 5) => {
+    // For non-platform_admins, this will fetch runs triggered by them.
+    // Platform admins would see all recent runs if userId filter is omitted by role check in route.
+    // This service function assumes the role check and potential omission of userId filter happens in the route handler.
+    const result = await query(
+        `SELECT wr.run_id, wr.status, wr.start_time, wr.current_step_name, w.name as workflow_name, u.username as triggering_username
+         FROM workflow_runs wr
+         JOIN workflows w ON wr.workflow_id = w.workflow_id
+         LEFT JOIN users u ON wr.triggering_user_id = u.user_id
+         WHERE wr.triggering_user_id = $1
+         ORDER BY wr.start_time DESC
+         LIMIT $2`,
+        [userId, limit]
+    );
+    return result.rows;
+};
+
+export const getAllRecentWorkflowRuns = async (limit: number = 5) => {
+    // For platform admins to see all recent runs
+    const result = await query(
+        `SELECT wr.run_id, wr.status, wr.start_time, wr.current_step_name, w.name as workflow_name, u.username as triggering_username
+         FROM workflow_runs wr
+         JOIN workflows w ON wr.workflow_id = w.workflow_id
+         LEFT JOIN users u ON wr.triggering_user_id = u.user_id
+         ORDER BY wr.start_time DESC
+         LIMIT $1`,
+        [limit]
+    );
+    return result.rows;
 };
 
 
