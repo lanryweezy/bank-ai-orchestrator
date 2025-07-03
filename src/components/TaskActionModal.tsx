@@ -6,8 +6,9 @@ import { Textarea } from "@/components/ui/textarea';
 import { Task, TaskComment } from '@/types/workflows'; // Added TaskComment
 import apiClient from '@/services/apiClient';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Terminal, MessageSquare, Send, UserCircle } from "lucide-react"; // Added icons
-import { formatDistanceToNow } from 'date-fns'; // For relative time
+import { Terminal, MessageSquare, Send, UserCircle } from "lucide-react";
+import { formatDistanceToNow } from 'date-fns';
+import UserSelector from '../admin/UserSelector'; // Import UserSelector
 
 interface TaskActionModalProps {
   task: Task | null;
@@ -295,16 +296,19 @@ const TaskActionModal: React.FC<TaskActionModalProps> = ({ task, isOpen, onClose
                     <DialogTitle className="text-lg">Delegate Task: {task.step_name_in_workflow}</DialogTitle>
                     <DialogDescription>Assign this task to another user.</DialogDescription>
                 </DialogHeader>
+import UserSelector from '../admin/UserSelector'; // Import UserSelector
+
+// ... (rest of imports)
+
+// ... (inside TaskActionModal component)
                 <div className="py-4 space-y-3">
                     <div>
-                        <Label htmlFor="targetUserId">Target User ID</Label>
-                        <Input
-                            id="targetUserId"
-                            value={targetUserIdToDelegate}
-                            onChange={(e) => setTargetUserIdToDelegate(e.target.value)}
-                            placeholder="Enter User ID to delegate to"
+                        <Label htmlFor="targetUserId">Delegate to User</Label>
+                        <UserSelector
+                            selectedUserId={targetUserIdToDelegate}
+                            onSelectUser={(userId) => setTargetUserIdToDelegate(userId || '')}
+                            placeholder="Search and select a user..."
                         />
-                        {/* TODO: Replace with a user selection dropdown/search */}
                     </div>
                     {delegationError && (
                         <Alert variant="destructive">

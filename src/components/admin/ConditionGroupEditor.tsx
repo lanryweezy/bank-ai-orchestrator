@@ -119,15 +119,20 @@ interface SingleConditionEditorProps {
 const SingleConditionEditor: React.FC<SingleConditionEditorProps> = ({condition, onConditionChange}) => {
 
     const handleChange = (field: keyof SingleConditionType, value: any) => {
-        onConditionChange({ ...condition, [field]: value });
+        const newCondition = { ...condition, [field]: value };
+        // If operator changes to/from one that doesn't need a value, clear value
+        if (field === 'operator' && (value === 'exists' || value === 'not_exists')) {
+            delete newCondition.value;
+        }
+        onConditionChange(newCondition);
     };
 
-    const needsValue = !['exists', 'not_exists'].includes(condition.operator);
+    const needsValueInput = !['exists', 'not_exists'].includes(condition.operator);
 
     return (
-        <div className="space-y-2 p-2 border rounded bg-white">
+        <div className="space-y-2 p-3 border border-gray-300 rounded-md bg-white shadow-sm"> {/* Added padding and shadow */}
             <div>
-                <Label className="text-xs">Field Path</Label>
+                <Label htmlFor={`condition-field-${condition.field}`} className="text-xs font-medium">Field Path</Label> {/* Added font-medium */}
                 <Input
                     type="text"
                     value={condition.field}
@@ -147,15 +152,16 @@ const SingleConditionEditor: React.FC<SingleConditionEditorProps> = ({condition,
                         </SelectContent>
                     </Select>
                 </div>
-                {needsValue && (
+                {needsValueInput && ( // Changed variable name
                     <div>
-                        <Label className="text-xs">Value</Label>
+                        <Label htmlFor={`condition-value-${condition.field}`} className="text-xs font-medium">Value</Label>
                         <Input
+                            id={`condition-value-${condition.field}`}
                             type="text"
                             value={condition.value || ''}
                             onChange={(e) => handleChange('value', e.target.value)}
                             placeholder="Value to compare"
-                            className="text-xs h-8"
+                            className="text-xs h-8 mt-1"
                         />
                     </div>
                 )}

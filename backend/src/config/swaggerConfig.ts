@@ -132,7 +132,57 @@ const options: swaggerJsdoc.Options = {
                 workflow_id: { type: 'string', format: 'uuid', readOnly: true },
                 name: { type: 'string', example: 'Loan Application Processing' },
                 description: { type: 'string', nullable: true },
-                definition_json: { type: 'object', description: 'JSON defining workflow steps and logic.' },
+                definition_json: {
+                  type: 'object',
+                  description: 'JSON defining workflow steps, transitions, conditions, error handling, etc.',
+                  example: {
+                    name: "Sample Workflow with New Features",
+                    description: "Illustrates new conditional logic, error handling, and step types.",
+                    start_step: "check_input_data",
+                    steps: [
+                      {
+                        name: "check_input_data",
+                        type: "decision",
+                        transitions: [
+                          {
+                            to: "call_external_api",
+                            condition_type: "conditional",
+                            condition_group: {
+                              logical_operator: "AND",
+                              conditions: [
+                                { field: "context.amount", operator: ">", value: 1000 },
+                                { field: "context.type", operator: "==", value: "priority" }
+                              ]
+                            }
+                          },
+                          { to: "manual_review_low_amount", condition_type: "always" }
+                        ],
+                        error_handling: {
+                          on_failure: { action: "fail_workflow" }
+                        }
+                      },
+                      {
+                        name: "call_external_api",
+                        type: "external_api_call",
+                        external_api_call_config: {
+                          url_template: "https://api.example.com/process/{{context.id}}",
+                          method: "POST",
+                          body_template: { data: "{{context.some_data}}", amount: "{{context.amount}}" },
+                          headers_template: { "X-API-Key": "{{secrets.MY_SERVICE_KEY}}" }
+                        },
+                        error_handling: {
+                          retry_policy: { max_attempts: 3, delay_seconds: 5 },
+                          on_failure: { action: "transition_to_step", next_step: "api_failure_handler" }
+                        },
+                        transitions: [{to: "final_processing", condition_type: "always"}]
+                      },
+                      { name: "manual_review_low_amount", type: "human_review", assigned_role: "clerk", deadline_minutes: 60, transitions: [{to: "final_processing", condition_type: "always"}]},
+                      { name: "api_failure_handler", type: "human_review", assigned_role: "support_lead", description: "Handle API call failure."},
+                      { name: "final_processing", type: "agent_execution", agent_core_logic_identifier: "final_processor_v1"},
+                      { name: "end_workflow", type: "end", final_status: "completed"}
+                    ]
+                  }
+                },
                 version: { type: 'integer', default: 1 },
                 is_active: { type: 'boolean', default: true },
                 created_at: { type: 'string', format: 'date-time', readOnly: true },
@@ -145,9 +195,17 @@ const options: swaggerJsdoc.Options = {
             properties: {
                 name: { type: 'string', example: 'Loan Application Processing' },
                 description: { type: 'string', nullable: true },
-                definition_json: { type: 'object', description: 'JSON defining workflow steps and logic.' },
-                version: { type: 'integer', nullable: true },
-                is_active: { type: 'boolean', nullable: true },
+                definition_json: {
+                  type: 'object',
+                  description: 'JSON defining workflow steps and logic. See WorkflowDefinition for a detailed example.',
+                  example: {
+                    name: "Loan Application Initial",
+                    start_step: "intake",
+                    steps: [{ name: "intake", type: "human_review", assigned_role: "clerk"}]
+                  }
+                },
+                version: { type: 'integer', nullable: true, description: "Version number for the workflow. Auto-managed for new versions of existing names." },
+                is_active: { type: 'boolean', nullable: true, description: "Whether this workflow version is active." },
             },
             required: ['name', 'definition_json']
         },
@@ -227,6 +285,72 @@ const options: swaggerJsdoc.Options = {
                     }
                 }
             }
+        },
+        // Workflow Triggers
+        ScheduledTriggerConfig: {
+            type: 'object',
+            properties: {
+                cron_string: { type: 'string', example: '0 0 * * *' },
+                timezone: { type: 'string', example: 'America/New_York', default: 'UTC' },
+                default_payload: { type: 'object', nullable: true, example: { "source": "cron" } }
+            },
+            required: ['cron_string']
+        },
+        WebhookTriggerSecurityConfig: {
+            type: 'object',
+            properties: {
+                type: { type: 'string', enum: ['none', 'hmac_sha256', 'bearer_token'], default: 'none'},
+                secret_env_var: { type: 'string', description: "Name of ENV var holding the secret/token."},
+                header_name: { type: 'string', description: "HTTP header name for signature/token."}
+            }
+        },
+        WebhookTriggerConfig: {
+            type: 'object',
+            properties: {
+                path_identifier: { type: 'string', example: 'unique-hook-path' },
+                method: { type: 'string', enum: ['POST', 'GET', 'PUT'], default: 'POST' },
+                security: { '$ref': '#/components/schemas/WebhookTriggerSecurityConfig' },
+                payload_mapping_jq: { type: 'string', default: '.', example: '.body' }
+            },
+            required: ['path_identifier']
+        },
+        TriggerInput: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', example: 'Nightly Batch Workflow Trigger' },
+                description: { type: 'string', nullable: true },
+                workflow_id: { type: 'string', format: 'uuid', description: "ID of the specific workflow version to run." },
+                type: { type: 'string', enum: ['scheduled', 'webhook', 'event_bus'] },
+                configuration_json: {
+                    oneOf: [
+                        { '$ref': '#/components/schemas/ScheduledTriggerConfig' },
+                        { '$ref': '#/components/schemas/WebhookTriggerConfig' },
+                        { type: 'object', description: "Configuration for other types like event_bus" }
+                    ],
+                    description: "Configuration specific to the trigger type."
+                },
+                is_enabled: { type: 'boolean', default: true }
+            },
+            required: ['name', 'workflow_id', 'type', 'configuration_json']
+        },
+        WorkflowTrigger: {
+            allOf: [ { '$ref': '#/components/schemas/TriggerInput' } ],
+            type: 'object',
+            properties: {
+                trigger_id: { type: 'string', format: 'uuid', readOnly: true },
+                created_by_user_id: { type: 'string', format: 'uuid', readOnly: true },
+                last_triggered_at: { type: 'string', format: 'date-time', nullable: true, readOnly: true },
+                created_at: { type: 'string', format: 'date-time', readOnly: true },
+                updated_at: { type: 'string', format: 'date-time', readOnly: true }
+            }
+        },
+        // Task Delegation
+        DelegateTaskBody: {
+            type: 'object',
+            properties: {
+                targetUserId: { type: 'string', format: 'uuid', description: "User ID of the user to delegate the task to."}
+            },
+            required: ['targetUserId']
         }
       },
       securitySchemes: { // Define security schemes (e.g., Bearer token for JWT)
@@ -236,6 +360,37 @@ const options: swaggerJsdoc.Options = {
           bearerFormat: 'JWT',
         },
       },
+      parameters: { // Reusable parameters
+        TaskIdPath: {
+          name: 'taskId',
+          in: 'path',
+          required: true,
+          description: 'ID of the task.',
+          schema: { type: 'string', format: 'uuid' }
+        },
+        TriggerIdPath: {
+          name: 'triggerId',
+          in: 'path',
+          required: true,
+          description: 'ID of the trigger.',
+          schema: { type: 'string', format: 'uuid' }
+        },
+        WorkflowIdPath: { // Already implicitly defined in some routes, but good to have reusable
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          description: 'ID of the workflow definition or instance.',
+          schema: { type: 'string', format: 'uuid' }
+        }
+      },
+      responses: { // Reusable responses
+        NotFound: { description: 'The requested resource was not found.', content: {'application/json': {schema: {'$ref': '#/components/schemas/ErrorResponse'}}} },
+        BadRequest: { description: 'Invalid request payload or parameters.', content: {'application/json': {schema: {'$ref': '#/components/schemas/ErrorResponse'}}} },
+        Unauthorized: { description: 'Unauthorized - Authentication token is missing or invalid.', content: {'application/json': {schema: {'$ref': '#/components/schemas/ErrorResponse'}}} },
+        Forbidden: { description: 'Forbidden - User does not have permission to perform this action.', content: {'application/json': {schema: {'$ref': '#/components/schemas/ErrorResponse'}}} },
+        Conflict: { description: 'Conflict - The request could not be completed due to a conflict with the current state of the resource.', content: {'application/json': {schema: {'$ref': '#/components/schemas/ErrorResponse'}}} },
+        InternalServerError: { description: 'Internal Server Error.', content: {'application/json': {schema: {'$ref': '#/components/schemas/ErrorResponse'}}} },
+      }
     },
     // security: [ // Global security requirement, can be overridden at operation level
     //   {

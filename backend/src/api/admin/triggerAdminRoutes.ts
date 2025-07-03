@@ -9,35 +9,52 @@ import {
     updateTrigger,
     deleteTrigger,
     getTriggersByWorkflowId,
-    ScheduledConfig, // Import config types for casting/validation aid
-    WebhookConfig    // Import config types for casting/validation aid
-    // May add getAllTriggers(filters) from service later if needed for a general admin list
 } from '../../services/triggerService';
+import { z } from 'zod'; // Already imported by previous step, but good to ensure
 
 const router = express.Router();
 
-// Protect all routes in this file
 router.use(authenticateToken, isPlatformAdmin);
 
-// Create a new trigger
+/**
+ * @openapi
+ * tags:
+ *   name: Admin - Workflow Triggers
+ *   description: Manage Workflow Triggers (Admin access required)
+ */
+
+/**
+ * @openapi
+ * /admin/triggers:
+ *   post:
+ *     tags: [Admin - Workflow Triggers]
+ *     summary: Create a new workflow trigger
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/TriggerInput'
+ *     responses:
+ *       '201':
+ *         description: Trigger created successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/WorkflowTrigger'
+ *       '400': { $ref: '#/components/responses/BadRequest' }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '403': { $ref: '#/components/responses/Forbidden' }
+ *       '409': { $ref: '#/components/responses/Conflict' }
+ *       '500': { $ref: '#/components/responses/InternalServerError' }
+ */
 router.post('/', async (req: express.Request, res: express.Response) => {
     try {
-        const userId = req.user!.userId; // From authenticateToken
+        const userId = req.user!.userId;
         const data = triggerInputSchema.parse({ ...req.body, created_by_user_id: userId });
-
-        // The refine in triggerInputSchema should handle config validation based on type.
-        // Explicit casting here is mostly for type safety if accessing specific config fields post-parse.
-        if (data.type === 'scheduled') {
-            // data.configuration_json is already validated as ScheduledConfig by Zod refine
-        } else if (data.type === 'webhook') {
-            // data.configuration_json is already validated as WebhookConfig by Zod refine
-        }
-        // TODO: Handle event_bus config validation if it becomes more structured
-
         const trigger = await createTrigger(data);
-        // TODO: If it's a 'scheduled' trigger and is_enabled, inform scheduler to load/update it.
-        // This requires a mechanism to communicate with the running scheduler instance.
-        // For now, scheduler loads on startup. Updates/new triggers might need restart or dynamic loading.
         res.status(201).json(trigger);
     } catch (error: any) {
         if (error instanceof ZodError) {
@@ -51,7 +68,28 @@ router.post('/', async (req: express.Request, res: express.Response) => {
     }
 });
 
-// Get a trigger by ID
+/**
+ * @openapi
+ * /admin/triggers/{triggerId}:
+ *   get:
+ *     tags: [Admin - Workflow Triggers]
+ *     summary: Get a specific trigger by ID
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/TriggerIdPath'
+ *     responses:
+ *       '200':
+ *         description: Trigger details.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/WorkflowTrigger'
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '403': { $ref: '#/components/responses/Forbidden' }
+ *       '500': { $ref: '#/components/responses/InternalServerError' }
+ */
 router.get('/:triggerId', async (req: express.Request, res: express.Response) => {
     try {
         const trigger = await getTriggerById(req.params.triggerId);
@@ -65,7 +103,35 @@ router.get('/:triggerId', async (req: express.Request, res: express.Response) =>
     }
 });
 
-// Get triggers for a specific workflow ID
+/**
+ * @openapi
+ * /admin/triggers/workflow/{workflowId}:
+ *   get:
+ *     tags: [Admin - Workflow Triggers]
+ *     summary: Get all triggers for a specific workflow ID
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: workflowId
+ *         in: path
+ *         required: true
+ *         description: ID of the workflow to fetch triggers for.
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       '200':
+ *         description: A list of triggers for the specified workflow.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/WorkflowTrigger'
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '403': { $ref: '#/components/responses/Forbidden' }
+ *       '500': { $ref: '#/components/responses/InternalServerError' }
+ */
 router.get('/workflow/:workflowId', async (req: express.Request, res: express.Response) => {
     try {
         const triggers = await getTriggersByWorkflowId(req.params.workflowId);
@@ -76,26 +142,46 @@ router.get('/workflow/:workflowId', async (req: express.Request, res: express.Re
     }
 });
 
-
-// Update a trigger
+/**
+ * @openapi
+ * /admin/triggers/{triggerId}:
+ *   put:
+ *     tags: [Admin - Workflow Triggers]
+ *     summary: Update an existing trigger
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/TriggerIdPath'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/TriggerInput'
+ *     responses:
+ *       '200':
+ *         description: Trigger updated successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/WorkflowTrigger'
+ *       '400': { $ref: '#/components/responses/BadRequest' }
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '403': { $ref: '#/components/responses/Forbidden' }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ *       '409': { $ref: '#/components/responses/Conflict' }
+ *       '500': { $ref: '#/components/responses/InternalServerError' }
+ */
 router.put('/:triggerId', async (req: express.Request, res: express.Response) => {
     try {
-        // created_by_user_id should not be updatable via this route.
-        // The service's updateTrigger function already omits it from direct update.
-        // We only pass fields that are allowed to be changed.
         const dataToUpdate = triggerInputSchema.partial().omit({ created_by_user_id: true }).parse(req.body);
-
         if (Object.keys(dataToUpdate).length === 0) {
             return res.status(400).json({ message: "No update fields provided." });
         }
-
         const trigger = await updateTrigger(req.params.triggerId, dataToUpdate);
         if (!trigger) {
             return res.status(404).json({ message: "Trigger not found or update failed" });
         }
-        // TODO: If a 'scheduled' trigger's cron_string, timezone, or is_enabled status changes,
-        // the running scheduler needs to be updated (stop old job, start new one).
-        // This is a complex part of dynamic scheduler management.
         res.status(200).json(trigger);
     } catch (error: any) {
         if (error instanceof ZodError) {
@@ -109,15 +195,31 @@ router.put('/:triggerId', async (req: express.Request, res: express.Response) =>
     }
 });
 
-// Delete a trigger
+/**
+ * @openapi
+ * /admin/triggers/{triggerId}:
+ *   delete:
+ *     tags: [Admin - Workflow Triggers]
+ *     summary: Delete a trigger
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/TriggerIdPath'
+ *     responses:
+ *       '204':
+ *         description: Trigger deleted successfully. No content.
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '403': { $ref: '#/components/responses/Forbidden' }
+ *       '404': { $ref: '#/components/responses/NotFound' }
+ *       '500': { $ref: '#/components/responses/InternalServerError' }
+ */
 router.delete('/:triggerId', async (req: express.Request, res: express.Response) => {
     try {
         const success = await deleteTrigger(req.params.triggerId);
         if (!success) {
             return res.status(404).json({ message: "Trigger not found" });
         }
-        // TODO: If a 'scheduled' trigger is deleted, its corresponding cron job should be stopped.
-        res.status(204).send(); // No content
+        res.status(204).send();
     } catch (error: any) {
         console.error("Error deleting trigger:", error);
         res.status(500).json({ message: "Internal server error" });

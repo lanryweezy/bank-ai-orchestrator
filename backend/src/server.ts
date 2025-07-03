@@ -35,7 +35,8 @@ import taskRoutes from './api/tasks/taskRoutes';
 // Admin Routes
 import agentTemplateAdminRoutes from './api/admin/agentTemplateAdminRoutes';
 import workflowAdminRoutes from './api/admin/workflowAdminRoutes';
-import triggerAdminRoutes from './api/admin/triggerAdminRoutes'; // Import new admin trigger routes
+import triggerAdminRoutes from './api/admin/triggerAdminRoutes';
+import userAdminRoutes from './api/admin/userAdminRoutes'; // Import user admin routes
 
 // Webhook Public Routes
 import webhookRoutes from './api/webhookRoutes';
@@ -54,7 +55,8 @@ app.use('/api/tasks', taskRoutes);
 // Mount Admin Routes (ensure these are appropriately protected by middleware inside the route files)
 app.use('/api/admin/agent-templates', agentTemplateAdminRoutes);
 app.use('/api/admin/workflows', workflowAdminRoutes);
-app.use('/api/admin/triggers', triggerAdminRoutes); // Mount new admin trigger routes
+app.use('/api/admin/triggers', triggerAdminRoutes);
+app.use('/api/admin/users', userAdminRoutes); // Mount user admin routes
 
 // Mount Webhook Public Routes
 app.use('/webhooks', webhookRoutes); // Using /webhooks as base path, not /api/webhooks

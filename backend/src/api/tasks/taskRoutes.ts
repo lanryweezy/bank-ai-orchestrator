@@ -211,7 +211,36 @@ router.get('/:taskId/comments', async (req: express.Request, res: express.Respon
 
 // Other task actions like claim, assign, update_details could be added here.
 
-// POST /api/tasks/:taskId/delegate - Delegate a task
+/**
+ * @openapi
+ * /tasks/{taskId}/delegate:
+ *   post:
+ *     tags: [Tasks]
+ *     summary: Delegate a task to another user
+ *     description: Allows the currently assigned user to delegate the task.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/TaskIdPath'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/DelegateTaskBody'
+ *     responses:
+ *       '200':
+ *         description: Task delegated successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Task'
+ *       '400': { $ref: '#/components/responses/BadRequest' } # e.g. invalid targetUserId, self-delegation
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '403': { $ref: '#/components/responses/Forbidden' } # e.g. not current assignee
+ *       '404': { $ref: '#/components/responses/NotFound' } # Task not found
+ *       '500': { $ref: '#/components/responses/InternalServerError' }
+ */
 const delegateTaskBodySchema = z.object({
   targetUserId: z.string().uuid("Invalid target user ID format."),
 });
