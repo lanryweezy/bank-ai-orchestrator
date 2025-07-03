@@ -154,8 +154,79 @@ const StepConfigurator: React.FC<StepConfiguratorProps> = ({ step, onStepChange,
                         </SelectContent>
                     </Select>
                 </div>
-                {/* TODO: UI for headers_template (key-value), query_params_template (key-value), body_template (textarea), timeout, success_criteria */}
-                <p className="text-xs text-gray-500">Further fields for headers, query params, body, timeout, success criteria to be added.</p>
+
+                {/* Headers Template */}
+                <div className="mt-2">
+                    <Label className="text-xs font-medium">Headers (Key-Value Pairs)</Label>
+                    {(Object.entries(step.external_api_call_config?.headers_template || {})).map(([key, value], idx) => (
+                        <div key={`header-${idx}`} className="flex items-center space-x-2 mt-1">
+                            <Input type="text" value={key} placeholder="Header Name" className="h-8 text-xs flex-1"
+                                   onChange={(e) => {
+                                       const newHeaders = {...step.external_api_call_config?.headers_template};
+                                       delete newHeaders[key]; // Remove old key
+                                       newHeaders[e.target.value] = value; // Add new key
+                                       onStepChange({...step, external_api_call_config: {...step.external_api_call_config, headers_template: newHeaders} as ExternalApiCallStepConfigType});
+                                   }}/>
+                            <Input type="text" value={value} placeholder="Header Value (can use {{templates}})" className="h-8 text-xs flex-1"
+                                   onChange={(e) => onStepChange({...step, external_api_call_config: {...step.external_api_call_config, headers_template: {...step.external_api_call_config?.headers_template, [key]: e.target.value}} as ExternalApiCallStepConfigType})}/>
+                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => {
+                                const newHeaders = {...step.external_api_call_config?.headers_template};
+                                delete newHeaders[key];
+                                onStepChange({...step, external_api_call_config: {...step.external_api_call_config, headers_template: newHeaders} as ExternalApiCallStepConfigType});
+                            }}><Trash2 size={14}/></Button>
+                        </div>
+                    ))}
+                    <Button type="button" variant="outline" size="xs" className="mt-1 text-xs"
+                            onClick={() => {
+                                const newKey = `header${Object.keys(step.external_api_call_config?.headers_template || {}).length + 1}`;
+                                onStepChange({...step, external_api_call_config: {...step.external_api_call_config, headers_template: {...step.external_api_call_config?.headers_template, [newKey]: ""}} as ExternalApiCallStepConfigType});
+                            }}>+ Add Header</Button>
+                </div>
+
+                {/* Query Params Template */}
+                <div className="mt-2">
+                    <Label className="text-xs font-medium">Query Parameters (Key-Value Pairs)</Label>
+                     {(Object.entries(step.external_api_call_config?.query_params_template || {})).map(([key, value], idx) => (
+                        <div key={`query-${idx}`} className="flex items-center space-x-2 mt-1">
+                            <Input type="text" value={key} placeholder="Param Name" className="h-8 text-xs flex-1"
+                                   onChange={(e) => {
+                                       const newParams = {...step.external_api_call_config?.query_params_template};
+                                       delete newParams[key];
+                                       newParams[e.target.value] = value;
+                                       onStepChange({...step, external_api_call_config: {...step.external_api_call_config, query_params_template: newParams} as ExternalApiCallStepConfigType});
+                                   }}/>
+                            <Input type="text" value={value} placeholder="Param Value (can use {{templates}})" className="h-8 text-xs flex-1"
+                                   onChange={(e) => onStepChange({...step, external_api_call_config: {...step.external_api_call_config, query_params_template: {...step.external_api_call_config?.query_params_template, [key]: e.target.value}} as ExternalApiCallStepConfigType})}/>
+                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => {
+                                const newParams = {...step.external_api_call_config?.query_params_template};
+                                delete newParams[key];
+                                onStepChange({...step, external_api_call_config: {...step.external_api_call_config, query_params_template: newParams} as ExternalApiCallStepConfigType});
+                            }}><Trash2 size={14}/></Button>
+                        </div>
+                    ))}
+                    <Button type="button" variant="outline" size="xs" className="mt-1 text-xs"
+                            onClick={() => {
+                                const newKey = `param${Object.keys(step.external_api_call_config?.query_params_template || {}).length + 1}`;
+                                onStepChange({...step, external_api_call_config: {...step.external_api_call_config, query_params_template: {...step.external_api_call_config?.query_params_template, [newKey]: ""}} as ExternalApiCallStepConfigType});
+                            }}>+ Add Query Param</Button>
+                </div>
+
+                {/* Body Template (Textarea for now, could be JSON editor) */}
+                {['POST', 'PUT', 'PATCH'].includes(step.external_api_call_config?.method || 'GET') && (
+                    <div className="mt-2">
+                        <Label htmlFor={`extapi-body-${step.name}`} className="text-xs font-medium">Body Template (JSON or Text)</Label>
+                        <Textarea id={`extapi-body-${step.name}`}
+                                  value={typeof step.external_api_call_config?.body_template === 'string' ? step.external_api_call_config.body_template : JSON.stringify(step.external_api_call_config?.body_template || {}, null, 2)}
+                                  onChange={(e) => {
+                                      let bodyValue: any = e.target.value;
+                                      try { bodyValue = JSON.parse(e.target.value); } catch (jsonErr) { /* keep as string if not valid JSON */ }
+                                      onStepChange({...step, external_api_call_config: {...step.external_api_call_config, body_template: bodyValue } as ExternalApiCallStepConfigType});
+                                  }}
+                                  rows={4} className="font-mono text-xs" placeholder={`{ "key": "{{context.value}}" }`} />
+                    </div>
+                )}
+                {/* TODO: UI for timeout, success_criteria */}
+                <p className="text-xs text-gray-500 mt-2">Timeout and Success Criteria fields to be added.</p>
             </div>
         )}
 

@@ -52,53 +52,61 @@ const ConditionGroupEditor: React.FC<ConditionGroupEditorProps> = ({ group, onGr
   };
 
 
-  const renderCondition = (condition: SingleConditionType | ConditionGroupType, index: number) => {
+  const renderCondition = (condition: SingleConditionType | ConditionGroupType, index: number, nestingLevel: number) => {
     const isGroup = 'logical_operator' in condition;
+    const bgClass = nestingLevel % 2 === 0 ? 'bg-slate-50' : 'bg-slate-100';
+
 
     return (
-      <Card key={index} className="p-3 mb-2 bg-white shadow-sm">
-        <div className="flex justify-end mb-1">
-          <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:text-red-700" onClick={() => removeCondition(index)}>
-            <Trash2 size={14} />
+      <Card key={index} className={`p-3 mb-2 shadow-sm border ${bgClass}`}>
+        <div className="flex justify-end mb-1 -mt-1 -mr-1">
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-700" onClick={() => removeCondition(index)}>
+            <Trash2 size={15} />
           </Button>
         </div>
         {isGroup ? (
           <ConditionGroupEditor
             group={condition as ConditionGroupType}
             onGroupChange={(updatedNestedGroup) => handleConditionChange(index, updatedNestedGroup)}
+            nestingLevel={nestingLevel + 1} // Pass nesting level
           />
         ) : (
-          <div className="space-y-2">
-            <SingleConditionEditor
-                condition={condition as SingleConditionType}
-                onConditionChange={(updatedSingleCond) => handleConditionChange(index, updatedSingleCond)}
-            />
-          </div>
+          // SingleConditionEditor is already a Card, so no need to wrap further unless for specific styling
+          <SingleConditionEditor
+              condition={condition as SingleConditionType}
+              onConditionChange={(updatedSingleCond) => handleConditionChange(index, updatedSingleCond)}
+          />
         )}
       </Card>
     );
   };
 
+  const nestingLevel = (props as any).nestingLevel || 0; // Receive nesting level or default to 0
+  const groupBgClass = nestingLevel % 2 === 0 ? 'bg-gray-50' : 'bg-gray-100';
+
+
   return (
-    <div className="p-3 border rounded-md bg-slate-100 space-y-3">
-      <div className="flex items-center space-x-2">
-        <Label>Logical Operator for this group:</Label>
-        <Select value={group.logical_operator} onValueChange={handleLogicalOperatorChange}>
-          <SelectTrigger className="w-[100px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="AND">AND</SelectItem>
-            <SelectItem value="OR">OR</SelectItem>
-          </SelectContent>
-        </Select>
+    <Card className={`p-4 border rounded-lg shadow space-y-3 ${groupBgClass}`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <Label className="text-sm font-medium">Group Logic:</Label>
+          <Select value={group.logical_operator} onValueChange={handleLogicalOperatorChange}>
+            <SelectTrigger className="w-[120px] h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="AND" className="text-xs">AND (All true)</SelectItem>
+              <SelectItem value="OR" className="text-xs">OR (Any true)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      <div className="pl-4 border-l-2 border-slate-300 space-y-2">
-        {group.conditions.map(renderCondition)}
+      <div className={`ml-2 pl-3 border-l-2 ${nestingLevel > 0 ? 'border-sky-400' : 'border-slate-300'} space-y-2`}>
+        {group.conditions.map((cond, idx) => renderCondition(cond, idx, nestingLevel))}
       </div>
 
-      <div className="flex space-x-2 pt-2">
+      <div className="flex space-x-2 pt-3 border-t mt-3">
         <Button type="button" variant="outline" size="sm" onClick={addSingleCondition} className="text-xs">
           <PlusCircle size={14} className="mr-1"/> Add Single Condition
         </Button>
