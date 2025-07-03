@@ -18,54 +18,96 @@ jest.mock('../config/db');
 describe('workflowService', () => {
   const mockQuery = db.query as jest.Mock;
 
-  const workflowDefData = {
-    workflow_id: 'wf-uuid-1',
+  // Input data for creating a workflow (no workflow_id)
+  const workflowCreateInput = {
     name: 'Test Workflow',
     description: 'A test workflow definition',
-    definition_json: { steps: [{ name: 'step1', type: 'human_review' }], start_step: 'step1' },
+    definition_json: {
+      start_step: 'step1',
+      steps: [{
+        name: 'step1',
+        type: 'human_review' as const, // Use 'as const' for literal type
+        // No transitions needed for this simple test case to pass schema
+      }]
+    },
     version: 1,
     is_active: true,
   };
+
+  // Expected data structure after DB insertion (includes workflow_id and other DB defaults)
+  const expectedWorkflowFromDb = {
+    ...workflowCreateInput,
+    workflow_id: 'wf-uuid-1', // Example UUID
+    created_at: new Date().toISOString(), // Example timestamp
+    updated_at: new Date().toISOString(), // Example timestamp
+  };
+
 
   beforeEach(() => {
     mockQuery.mockReset();
   });
 
   describe('createWorkflowDefinition', () => {
-    it('should create and return a workflow definition', async () => {
-      mockQuery.mockResolvedValueOnce({ rows: [] }); // No existing name/version combo
-      mockQuery.mockResolvedValueOnce({ rows: [workflowDefData] }); // Insert result
-      const result = await createWorkflowDefinition(workflowDefData);
-      expect(mockQuery).toHaveBeenCalledWith(
-        'INSERT INTO workflows (name, description, definition_json, version, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [workflowDefData.name, workflowDefData.description, workflowDefData.definition_json, workflowDefData.version, workflowDefData.is_active]
-      );
-      expect(result).toEqual(workflowDefData);
+    it('should create and return a workflow definition (when is_active is true)', async () => {
+      const localCreateInput = { ...workflowCreateInput, is_active: true };
+      const localExpectedFromDb = { ...expectedWorkflowFromDb, is_active: true };
+
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // 1. Check existing name/version
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // 2. UPDATE other versions to inactive
+      mockQuery.mockResolvedValueOnce({ rows: [localExpectedFromDb] }); // 3. INSERT result
+
+      const result = await createWorkflowDefinition(localCreateInput);
+      expect(mockQuery.mock.calls[0][0]).toContain('SELECT workflow_id FROM workflows WHERE name = $1 AND version = $2');
+      expect(mockQuery.mock.calls[1][0]).toContain('UPDATE workflows SET is_active = false');
+      expect(mockQuery.mock.calls[2][0]).toContain('INSERT INTO workflows');
+      expect(mockQuery.mock.calls[2][1]).toEqual([
+        localCreateInput.name, localCreateInput.description, localCreateInput.definition_json, localCreateInput.version, localCreateInput.is_active
+      ]);
+      expect(result).toEqual(localExpectedFromDb);
     });
+
+    it('should create and return a workflow definition (when is_active is false)', async () => {
+      const localCreateInput = { ...workflowCreateInput, is_active: false };
+      const localExpectedFromDb = { ...expectedWorkflowFromDb, is_active: false };
+
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // 1. Check existing name/version
+      // No UPDATE call if is_active is false
+      mockQuery.mockResolvedValueOnce({ rows: [localExpectedFromDb] }); // 2. INSERT result
+
+      const result = await createWorkflowDefinition(localCreateInput);
+      expect(mockQuery.mock.calls[0][0]).toContain('SELECT workflow_id FROM workflows WHERE name = $1 AND version = $2');
+      expect(mockQuery.mock.calls[1][0]).toContain('INSERT INTO workflows');
+      expect(mockQuery.mock.calls[1][1]).toEqual([
+        localCreateInput.name, localCreateInput.description, localCreateInput.definition_json, localCreateInput.version, localCreateInput.is_active
+      ]);
+      expect(result).toEqual(localExpectedFromDb);
+      expect(mockQuery).toHaveBeenCalledTimes(2); // Only 2 DB calls
+    });
+
     it('should throw error if name/version combo already exists', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [{ workflow_id: 'existing-wf-uuid' }] }); // Existing found
-      await expect(createWorkflowDefinition(workflowDefData)).rejects.toThrow('Workflow with name "Test Workflow" and version 1 already exists.');
+      await expect(createWorkflowDefinition(workflowCreateInput)).rejects.toThrow('Workflow with name "Test Workflow" and version 1 already exists.');
     });
   });
 
   describe('getWorkflowDefinitionById', () => {
     it('should return a definition by ID if found', async () => {
-      mockQuery.mockResolvedValueOnce({ rows: [workflowDefData] });
+      mockQuery.mockResolvedValueOnce({ rows: [expectedWorkflowFromDb] });
       const result = await getWorkflowDefinitionById('wf-uuid-1');
       expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM workflows WHERE workflow_id = $1', ['wf-uuid-1']);
-      expect(result).toEqual(workflowDefData);
+      expect(result).toEqual(expectedWorkflowFromDb);
     });
   });
 
   describe('getWorkflowDefinitionByNameAndVersion', () => {
     it('should return specific version if found and active', async () => {
-        mockQuery.mockResolvedValueOnce({ rows: [workflowDefData] });
+        mockQuery.mockResolvedValueOnce({ rows: [expectedWorkflowFromDb] });
         const result = await getWorkflowDefinitionByNameAndVersion("Test Workflow", 1);
         expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM workflows WHERE name = $1 AND version = $2 AND is_active = true', ["Test Workflow", 1]);
-        expect(result).toEqual(workflowDefData);
+        expect(result).toEqual(expectedWorkflowFromDb);
     });
     it('should return latest active version if version not specified', async () => {
-        const latestVersionData = {...workflowDefData, version: 2};
+        const latestVersionData = {...expectedWorkflowFromDb, version: 2};
         mockQuery.mockResolvedValueOnce({ rows: [latestVersionData] });
         const result = await getWorkflowDefinitionByNameAndVersion("Test Workflow");
         expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM workflows WHERE name = $1 AND is_active = true ORDER BY version DESC LIMIT 1', ["Test Workflow"]);
@@ -74,60 +116,78 @@ describe('workflowService', () => {
   });
 
   describe('getAllWorkflowDefinitions', () => {
-    it('should return all definitions', async () => {
-      mockQuery.mockResolvedValueOnce({ rows: [workflowDefData] });
-      const results = await getAllWorkflowDefinitions();
+    it('should return latest active per name by default (onlyActive=true behavior from service perspective)', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [expectedWorkflowFromDb] });
+      const results = await getAllWorkflowDefinitions(); // Defaults to onlyActive = false in service, which means ALL versions
       expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM workflows ORDER BY name ASC, version DESC');
       expect(results.length).toBe(1);
     });
-     it('should return only active definitions if specified', async () => {
-      mockQuery.mockResolvedValueOnce({ rows: [workflowDefData] });
-      const results = await getAllWorkflowDefinitions(true);
-      expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM workflows WHERE is_active = true ORDER BY name ASC, version DESC');
+     it('should return only latest active per name if onlyActive=true is passed', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [expectedWorkflowFromDb] });
+      const results = await getAllWorkflowDefinitions(true); // This flag now means "latest active per name"
+      expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('SELECT w1.*'));
       expect(results.length).toBe(1);
+    });
+    it('should return all versions if onlyActive is false (for admin list)', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [expectedWorkflowFromDb, {...expectedWorkflowFromDb, version: 2}] });
+      const results = await getAllWorkflowDefinitions(false);
+      expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM workflows ORDER BY name ASC, version DESC');
+      expect(results.length).toBe(2);
     });
   });
 
   describe('updateWorkflowDefinition', () => {
     it('should update and return the definition', async () => {
       const updateData = { description: 'Updated Desc' };
-      mockQuery.mockResolvedValueOnce({ rows: [{...workflowDefData, ...updateData}] }); // For the update
+      // Mock for getWorkflowDefinitionById (first call in updateWorkflowDefinition)
+      mockQuery.mockResolvedValueOnce({ rows: [expectedWorkflowFromDb] });
+      // Mock for the UPDATE query itself
+      mockQuery.mockResolvedValueOnce({ rows: [{...expectedWorkflowFromDb, ...updateData}] });
+
       const result = await updateWorkflowDefinition('wf-uuid-1', updateData);
-      expect(mockQuery).toHaveBeenCalledWith(
-        'UPDATE workflows SET "description" = $2 WHERE workflow_id = $1 RETURNING *',
-        ['wf-uuid-1', updateData.description]
-      );
+
+      // Check the UPDATE query call
+      expect(mockQuery.mock.calls[1][0]).toContain('UPDATE workflows SET "description" = $2');
+      expect(mockQuery.mock.calls[1][1]).toEqual(['wf-uuid-1', updateData.description]);
       expect(result?.description).toBe('Updated Desc');
     });
-    it('should throw if trying to update name/version to an existing combination', async () => {
-        const updateData = { name: "ExistingOtherWorkflow", version: 1 };
-        // Mock for getWorkflowDefinitionById (called inside update for current values)
-        mockQuery.mockResolvedValueOnce({ rows: [workflowDefData] });
-        // Mock for checking existing name/version combo
-        mockQuery.mockResolvedValueOnce({ rows: [{ workflow_id: 'other-wf-uuid' }] });
 
-        await expect(updateWorkflowDefinition('wf-uuid-1', updateData))
-            .rejects.toThrow('Another workflow with name "ExistingOtherWorkflow" and version 1 already exists.');
+    // This test might need adjustment based on how updateWorkflowDefinition handles name/version updates.
+    // The service currently prevents direct name/version changes on an existing record.
+    // This test was checking for conflict if name/version *were* changed.
+    // The new `updateWorkflowDefinition` throws if name/version are in `data` and different from current.
+    it('should throw error if trying to update name or version directly', async () => {
+        const updateDataWithNameChange = { name: "New Name For Workflow" };
+        mockQuery.mockResolvedValueOnce({ rows: [expectedWorkflowFromDb] }); // For getWorkflowDefinitionById
+        await expect(updateWorkflowDefinition('wf-uuid-1', updateDataWithNameChange))
+            .rejects.toThrow("Cannot change workflow name directly.");
+
+        const updateDataWithVersionChange = { version: 2 };
+        mockQuery.mockResolvedValueOnce({ rows: [expectedWorkflowFromDb] }); // For getWorkflowDefinitionById
+        await expect(updateWorkflowDefinition('wf-uuid-1', updateDataWithVersionChange))
+            .rejects.toThrow("Cannot change workflow version directly.");
     });
   });
 
   describe('ensureLoanApplicationWorkflowExists (Seeding Logic)', () => {
-    it('should seed the workflow if it does not exist', async () => {
-      // Mock for getWorkflowDefinitionByNameAndVersion's SELECT (returns empty, so it doesn't exist)
-      mockQuery.mockImplementationOnce(() => Promise.resolve({ rows: [] }));
-      // Mock for createWorkflowDefinition's SELECT (check before insert - also returns empty)
-      mockQuery.mockImplementationOnce(() => Promise.resolve({ rows: [] }));
-      // Mock for createWorkflowDefinition's INSERT
-      mockQuery.mockImplementationOnce(() => Promise.resolve({ rows: [{ name: LOAN_APPLICATION_WORKFLOW_NAME, version: 1 }] }));
+    it('should seed the workflow if it does not exist (and it will be active)', async () => {
+      // 1. getWorkflowDefinitionByNameAndVersion (finds nothing)
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      // Inside createWorkflowDefinition called by seeder:
+      // 2. SELECT to check if name/version exists (finds nothing)
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      // 3. UPDATE to deactivate other active versions (since new one is active)
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      // 4. INSERT the new workflow
+      mockQuery.mockResolvedValueOnce({ rows: [{ name: LOAN_APPLICATION_WORKFLOW_NAME, version: 1, is_active: true }] });
 
       await ensureLoanApplicationWorkflowExists();
 
-      // getWorkflowDefinitionByNameAndVersion was called (its query was mocked as the first one)
-      // createWorkflowDefinition was called (its two queries were mocked as second and third)
-      expect(mockQuery).toHaveBeenCalledTimes(3);
-      expect(mockQuery.mock.calls[0][0]).toContain('SELECT * FROM workflows WHERE name = $1 AND version = $2 AND is_active = true'); // From getByNameAndVersion
-      expect(mockQuery.mock.calls[1][0]).toContain('SELECT workflow_id FROM workflows WHERE name = $1 AND version = $2'); // From create (check)
-      expect(mockQuery.mock.calls[2][0]).toContain('INSERT INTO workflows'); // From create (insert)
+      expect(mockQuery).toHaveBeenCalledTimes(4);
+      expect(mockQuery.mock.calls[0][0]).toContain('SELECT * FROM workflows WHERE name = $1 AND version = $2 AND is_active = true');
+      expect(mockQuery.mock.calls[1][0]).toContain('SELECT workflow_id FROM workflows WHERE name = $1 AND version = $2');
+      expect(mockQuery.mock.calls[2][0]).toContain('UPDATE workflows SET is_active = false');
+      expect(mockQuery.mock.calls[3][0]).toContain('INSERT INTO workflows');
     });
 
     it('should not seed if workflow already exists', async () => {

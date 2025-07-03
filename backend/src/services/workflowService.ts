@@ -3,14 +3,143 @@ import { z } from 'zod';
 
 // Zod schema for Workflow definition
 
+// --- START: New schemas for Enhanced Conditional Logic ---
+
+// Define the basic condition structure
+const singleConditionSchema = z.object({
+  field: z.string().describe("Path to the field in step output or workflow context, e.g., 'output.status', 'context.data.amount'"),
+  operator: z.enum(['==', '!=', '>', '<', '>=', '<=', 'contains', 'not_contains', 'exists', 'not_exists', 'regex']), // Added regex
+  value: z.any().optional().describe("Value to compare against. Not needed for 'exists', 'not_exists'."),
+});
+export type SingleCondition = z.infer<typeof singleConditionSchema>;
+
+// Forward declaration for the recursive condition group
+const conditionGroupSchema: z.ZodType<any> = z.lazy(() =>
+  z.object({
+    logical_operator: z.enum(['AND', 'OR']),
+    conditions: z.array(
+      z.union([singleConditionSchema, conditionGroupSchema]) // Allows nesting
+    ).min(1, "A condition group must have at least one condition."),
+  })
+);
+export type ConditionGroup = z.infer<typeof conditionGroupSchema>;
+
+// Define the new transition schema
+const workflowTransitionSchema = z.object({
+  to: z.string(),
+  description: z.string().optional(),
+  condition_type: z.enum(['always', 'conditional']).default('conditional'), // 'always' or use a condition_group
+  condition_group: conditionGroupSchema.optional(), // The new complex condition structure
+}).refine(data => {
+    if (data.condition_type === 'conditional' && !data.condition_group) {
+        return false; // If conditional, condition_group must be present
+    }
+    if (data.condition_type === 'always' && data.condition_group) {
+        return false; // If always, condition_group must NOT be present
+    }
+    return true;
+}, {
+    message: "If condition_type is 'conditional', a 'condition_group' must be provided. If 'always', 'condition_group' must be omitted.",
+});
+export type WorkflowTransition = z.infer<typeof workflowTransitionSchema>;
+
+// --- END: New schemas for Enhanced Conditional Logic ---
+
+// --- START: New schemas for Error Handling ---
+
+const retryPolicySchema = z.object({
+  max_attempts: z.number().int().positive().default(1).describe("Total attempts including the first one. 1 means no retries."),
+  delay_seconds: z.number().positive().optional().describe("Initial delay in seconds before the first retry."),
+  backoff_strategy: z.enum(['fixed', 'exponential']).default('fixed'),
+  jitter: z.boolean().default(false),
+});
+export type RetryPolicy = z.infer<typeof retryPolicySchema>;
+
+const onFailureActionSchema = z.object({
+  action: z.enum(['fail_workflow', 'transition_to_step', 'continue_with_error', 'manual_intervention']).default('fail_workflow'),
+  next_step: z.string().optional().describe("Required if action is 'transition_to_step'."),
+  error_output_namespace: z.string().optional().describe("Namespace for error details in step output if continuing or transitioning."),
+}).refine(data => {
+  if (data.action === 'transition_to_step' && !data.next_step) {
+    return false;
+  }
+  return true;
+}, {
+  message: "If on_failure action is 'transition_to_step', 'next_step' must be provided.",
+});
+export type OnFailureAction = z.infer<typeof onFailureActionSchema>;
+
+const errorHandlingSchema = z.object({
+  retry_policy: retryPolicySchema.optional(),
+  on_failure: onFailureActionSchema.default({ action: 'fail_workflow' }), // Default on_failure action
+});
+export type ErrorHandling = z.infer<typeof errorHandlingSchema>;
+
+// --- END: New schemas for Error Handling ---
+
+// --- START: Schemas for Human Task Enhancements (Definition side) ---
+const humanTaskEscalationPolicySchema = z.object({
+  after_minutes: z.number().int().positive().describe("Time in minutes after task creation or assignment when escalation triggers."),
+  action: z.enum(['reassign_to_role', 'notify_manager_role', 'custom_event']).describe("Escalation action to take."),
+  target_role: z.string().optional().describe("The role to reassign to or notify. Required for certain actions."),
+  custom_event_name: z.string().optional().describe("Name of the custom event to emit if action is 'custom_event'."),
+}).refine(data => {
+  if ((data.action === 'reassign_to_role' || data.action === 'notify_manager_role') && !data.target_role) {
+    return false;
+  }
+  if (data.action === 'custom_event' && !data.custom_event_name) {
+    return false;
+  }
+  return true;
+}, {
+  message: "target_role is required for reassign_to_role/notify_manager_role. custom_event_name is required for custom_event.",
+});
+export type HumanTaskEscalationPolicy = z.infer<typeof humanTaskEscalationPolicySchema>;
+
+// --- END: Schemas for Human Task Enhancements (Definition side) ---
+
+// --- START: Schemas for External API Call Step ---
+const externalApiCallStepConfigSchema = z.object({
+  url_template: z.string().url("Must be a valid URL string, can include {{templates}}."),
+  method: z.enum(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']).default('GET'),
+  headers_template: z.record(z.string()).optional().describe("Key-value pairs for headers. Values can be templated."),
+  query_params_template: z.record(z.string()).optional().describe("Key-value pairs for URL query parameters. Values can be templated."),
+  body_template: z.any().optional().describe("Request body template (JSON object or string). Can be templated. Typically null for GET/DELETE."),
+  timeout_seconds: z.number().int().positive().optional().default(30),
+  // output_mapping_jq: z.string().optional().describe("JQ expression to transform API response."), // Defer full JQ for now
+  success_criteria: z.object({ // How to determine if the call was successful beyond just 2xx
+    status_codes: z.array(z.number().int().gte(200).lt(600)).optional().default([200, 201, 202, 204]).describe("List of HTTP status codes considered successful."),
+    // response_body_contains: z.string().optional(), // Example: check if body contains certain text
+    // response_body_json_path: z.object({ path: z.string(), expected_value: z.any() }).optional(), // Example: check value at JSON path
+  }).optional().default({ status_codes: [200, 201, 202, 204] }),
+});
+export type ExternalApiCallStepConfig = z.infer<typeof externalApiCallStepConfigSchema>;
+// --- END: Schemas for External API Call Step ---
+
+
 // Forward declaration for recursive step schema
 const baseWorkflowStepDefinitionSchemaWithoutRef = z.object({
   name: z.string(),
-  type: z.enum(['agent_execution', 'human_review', 'data_input', 'decision', 'parallel', 'join', 'end', 'sub_workflow']), // Added sub_workflow
+  type: z.enum([
+    'agent_execution',
+    'human_review',
+    'data_input',
+    'decision',
+    'parallel',
+    'join',
+    'end',
+    'sub_workflow',
+    'external_api_call' // Added new type
+  ]),
   description: z.string().optional(),
   agent_core_logic_identifier: z.string().optional(), // For agent_execution
-  assigned_role: z.string().optional(), // For human_review, data_input, decision
-  form_schema: z.record(z.any()).optional(), // For human_review, data_input, decision
+  external_api_call_config: externalApiCallStepConfigSchema.optional(), // Config for the new type
+
+  // Fields for human_review, data_input, decision steps
+  assigned_role: z.string().optional(),
+  form_schema: z.record(z.any()).optional(),
+  deadline_minutes: z.number().int().positive().optional().describe("Relative deadline for human tasks in minutes from creation."),
+  escalation_policy: humanTaskEscalationPolicySchema.optional().describe("Policy for escalating human tasks if not completed."),
 
   // For 'parallel' type
   join_on: z.string().optional(),
@@ -20,18 +149,12 @@ const baseWorkflowStepDefinitionSchemaWithoutRef = z.object({
   sub_workflow_version: z.number().int().positive().optional(),
   input_mapping: z.record(z.string()).optional(), // e.g. {"subWorkflowVar": "parentContext.valueToMap"}
 
-  // Common fields
-  transitions: z.array(z.object({
-    to: z.string(),
-    condition_type: z.enum(['always', 'on_output_value']).optional(),
-    field: z.string().optional(),
-    operator: z.enum(['==', '!=', '>', '<', '>=', '<=', 'contains', 'not_contains', 'exists', 'not_exists']).optional(),
-    value: z.any().optional(),
-    description: z.string().optional(),
-  })).optional(),
+  // Common fields for steps (transitions will use new schema)
+  transitions: z.array(z.lazy(() => workflowTransitionSchema)).optional(), // Updated to use new workflowTransitionSchema
   final_status: z.enum(['approved', 'rejected', 'completed']).optional(),
   default_input: z.record(z.any()).optional(),
   output_namespace: z.string().optional(),
+  error_handling: errorHandlingSchema.optional(), // Added error handling configuration
 });
 
 // Define WorkflowBranch schema using a lazy reference for steps within branches
@@ -188,6 +311,20 @@ const validateWorkflowLogic = (definitionJson: z.infer<typeof workflowDefinition
                 // actually exists in the database. This might be too slow for real-time validation in an editor
                 // and could make definitions too tightly coupled during design time.
                 // For now, just ensuring the field is present.
+            }
+
+            // Validate error_handling configuration
+            if (step.error_handling && step.error_handling.on_failure.action === 'transition_to_step') {
+                // Zod refine on onFailureActionSchema already ensures next_step exists if action is transition_to_step.
+                // Here, we validate that the next_step actually points to a defined step.
+                if (step.error_handling.on_failure.next_step && !allStepNames.has(step.error_handling.on_failure.next_step)) {
+                    issues.push(`Step "${currentPath}" on_failure action transitions to an undefined step "${step.error_handling.on_failure.next_step}".`);
+                }
+            }
+
+            // Validate external_api_call configuration
+            if (step.type === 'external_api_call' && !step.external_api_call_config) {
+                issues.push(`Step "${currentPath}" is of type 'external_api_call' but is missing 'external_api_call_config'.`);
             }
         }
     };
@@ -439,27 +576,30 @@ const loanApplicationWorkflowDefinitionJson = {
       // The workflow engine will need to map triggering_data_json and prior step outputs
       // to the agent's expected input structure.
       // For now, we assume `triggering_data_json` contains `submittedDocuments` and `applicationData`.
+      // Transitions updated to new conditional logic schema
       transitions: [
         {
-          "to": "human_review",
-          "condition_type": "on_output_value", // Example: proceed if agent assessment is not 'Rejected'
-          "field": "overallAssessment",
-          "operator": "!=",
-          "value": "Rejected",
-          "description": "Proceed to human review if agent assessment is not outright Rejected."
+          to: "human_review",
+          condition_type: "conditional",
+          condition_group: {
+            logical_operator: "AND",
+            conditions: [{ field: "output.overallAssessment", operator: "!=", value: "Rejected" }]
+          },
+          description: "Proceed to human review if agent assessment is not outright Rejected."
         },
         {
-          "to": "end_rejected_by_agent", // New end state
-          "condition_type": "on_output_value",
-          "field": "overallAssessment",
-          "operator": "==",
-          "value": "Rejected",
-          "description": "End workflow as Rejected if agent assessment is Rejected."
+          to: "end_rejected_by_agent",
+          condition_type: "conditional",
+          condition_group: {
+            logical_operator: "AND",
+            conditions: [{ field: "output.overallAssessment", operator: "==", value: "Rejected" }]
+          },
+          description: "End workflow as Rejected if agent assessment is Rejected."
         },
-         {
-          "to": "human_review", // Fallback if no specific conditions met above (e.g. if overallAssessment is missing)
-          "condition_type": "always",
-          "description": "Default to human review if other conditions not met."
+        {
+          to: "human_review", // Fallback
+          condition_type: "always",
+          description: "Default to human review if other conditions not met."
         }
       ]
     },
@@ -477,9 +617,30 @@ const loanApplicationWorkflowDefinitionJson = {
         required: ["reviewOutcome"]
       },
       transitions: [
-        { "to": "end_approved", "condition_type": "on_output_value", "field": "reviewOutcome", "operator": "==", "value": "approved" },
-        { "to": "end_rejected_by_human", "condition_type": "on_output_value", "field": "reviewOutcome", "operator": "==", "value": "rejected" },
-        { "to": "escalation_review", "condition_type": "on_output_value", "field": "reviewOutcome", "operator": "==", "value": "escalate" }
+        {
+          to: "end_approved",
+          condition_type: "conditional",
+          condition_group: {
+            logical_operator: "AND",
+            conditions: [{ field: "output.reviewOutcome", operator: "==", value: "approved" }]
+          }
+        },
+        {
+          to: "end_rejected_by_human",
+          condition_type: "conditional",
+          condition_group: {
+            logical_operator: "AND",
+            conditions: [{ field: "output.reviewOutcome", operator: "==", value: "rejected" }]
+          }
+        },
+        {
+          to: "escalation_review",
+          condition_type: "conditional",
+          condition_group: {
+            logical_operator: "AND",
+            conditions: [{ field: "output.reviewOutcome", operator: "==", value: "escalate" }]
+          }
+        }
       ]
     },
     {
@@ -496,8 +657,22 @@ const loanApplicationWorkflowDefinitionJson = {
             required: ["escalationOutcome"]
         },
         transitions: [
-            { "to": "end_approved", "condition_type": "on_output_value", "field": "escalationOutcome", "operator": "==", "value": "approved" },
-            { "to": "end_rejected_by_human", "condition_type": "on_output_value", "field": "escalationOutcome", "operator": "==", "value": "rejected" }
+          {
+            to: "end_approved",
+            condition_type: "conditional",
+            condition_group: {
+              logical_operator: "AND",
+              conditions: [{ field: "output.escalationOutcome", operator: "==", value: "approved" }]
+            }
+          },
+          {
+            to: "end_rejected_by_human",
+            condition_type: "conditional",
+            condition_group: {
+              logical_operator: "AND",
+              conditions: [{ field: "output.escalationOutcome", operator: "==", value: "rejected" }]
+            }
+          }
         ]
     },
     { "name": "end_approved", "type": "end", "final_status": "approved" },

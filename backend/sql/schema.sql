@@ -76,7 +76,7 @@ CREATE INDEX idx_configured_agents_status ON configured_agents(status);
 -- Workflows Table
 CREATE TABLE workflows (
     workflow_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(255) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
     description TEXT,
     definition_json JSONB NOT NULL, -- JSON defining workflow steps, transitions, agent calls, human tasks
     version INTEGER NOT NULL DEFAULT 1,
@@ -136,20 +136,80 @@ CREATE TABLE tasks (
     output_data_json JSONB, -- Result of the task
     due_date TIMESTAMP WITH TIME ZONE,
     sub_workflow_run_id UUID NULL REFERENCES workflow_runs(run_id), -- For tasks of type 'sub_workflow'
+    retry_count INTEGER NOT NULL DEFAULT 0, -- Added for error handling
+    deadline_at TIMESTAMP WITH TIME ZONE NULL, -- For task deadlines
+    escalation_policy_json JSONB NULL, -- For escalation rules
+    is_delegated BOOLEAN NOT NULL DEFAULT FALSE, -- True if task has been delegated
+    delegated_by_user_id UUID NULL REFERENCES users(user_id), -- User who performed the last delegation
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT chk_task_assignment CHECK (
         (type = 'agent_execution' AND assigned_to_agent_id IS NOT NULL AND assigned_to_user_id IS NULL AND assigned_to_role IS NULL) OR
-        (type = 'sub_workflow') OR -- Sub-workflow tasks are not directly assigned to users/agents in the parent
-        (type NOT IN ('agent_execution', 'sub_workflow') AND assigned_to_agent_id IS NULL AND (assigned_to_user_id IS NOT NULL OR assigned_to_role IS NOT NULL)) OR
-        (type NOT IN ('agent_execution', 'sub_workflow') AND assigned_to_agent_id IS NULL AND assigned_to_user_id IS NULL AND assigned_to_role IS NULL) -- e.g. pending assignment
+        (type = 'sub_workflow') OR
+        -- Human task assignment:
+        (type NOT IN ('agent_execution', 'sub_workflow') AND assigned_to_agent_id IS NULL AND (
+            (assigned_to_user_id IS NOT NULL AND assigned_to_role IS NULL) OR -- Assigned to a user
+            (assigned_to_role IS NOT NULL AND assigned_to_user_id IS NULL) OR    -- Assigned to a role
+            (assigned_to_user_id IS NULL AND assigned_to_role IS NULL)        -- Unassigned (pending claim or direct assignment later)
+        ))
+    ),
+    CONSTRAINT chk_delegation_logic CHECK (
+        (is_delegated = FALSE AND delegated_by_user_id IS NULL) OR -- Not delegated
+        (is_delegated = TRUE AND delegated_by_user_id IS NOT NULL AND assigned_to_user_id IS NOT NULL) -- Delegated: must have a delegator and a current user assignee
     )
 );
 
 CREATE INDEX idx_tasks_sub_workflow_run_id ON tasks(sub_workflow_run_id);
+CREATE INDEX idx_tasks_deadline_at ON tasks(deadline_at); -- Index for querying overdue tasks
+CREATE INDEX idx_tasks_delegated_by_user_id ON tasks(delegated_by_user_id);
+
 
 CREATE TRIGGER update_tasks_updated_at
 BEFORE UPDATE ON tasks
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+-- Workflow Triggers Table
+CREATE TABLE workflow_triggers (
+    trigger_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    workflow_id UUID NOT NULL REFERENCES workflows(workflow_id) ON DELETE CASCADE, -- Link to specific workflow version
+    created_by_user_id UUID NOT NULL REFERENCES users(user_id),
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    type VARCHAR(50) NOT NULL CHECK (type IN ('scheduled', 'webhook', 'event_bus')), -- Add more types as needed
+    configuration_json JSONB NOT NULL,
+    -- Examples for configuration_json:
+    -- For 'scheduled': { "cron_string": "0 * * * *", "timezone": "UTC", "default_payload": { ... } }
+    -- For 'webhook': { "path_identifier": "unique-webhook-path", "method": "POST", "security": { "type": "hmac", "secret_env_var": "WEBHOOK_SECRET_X" }, "payload_mapping_jq": ".body" }
+    -- For 'event_bus': { "topic_name": "orders.created", "filter_json_path": "$.type == 'special'" }
+    is_enabled BOOLEAN NOT NULL DEFAULT true,
+    last_triggered_at TIMESTAMP WITH TIME ZONE NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TRIGGER update_workflow_triggers_updated_at
+BEFORE UPDATE ON workflow_triggers
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+CREATE INDEX idx_workflow_triggers_workflow_id ON workflow_triggers(workflow_id);
+CREATE INDEX idx_workflow_triggers_type ON workflow_triggers(type);
+CREATE INDEX idx_workflow_triggers_is_enabled ON workflow_triggers(is_enabled);
+CREATE UNIQUE INDEX idx_workflow_triggers_webhook_path ON workflow_triggers(((configuration_json->>'path_identifier')::TEXT)) WHERE type = 'webhook'; -- Ensure webhook paths are unique
+
+-- Task Comments Table
+CREATE TABLE task_comments (
+    comment_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    task_id UUID NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(user_id), -- User who made the comment
+    comment_text TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP -- In case comments are editable
+);
+
+CREATE TRIGGER update_task_comments_updated_at
+BEFORE UPDATE ON task_comments
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 

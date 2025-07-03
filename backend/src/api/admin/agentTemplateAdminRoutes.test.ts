@@ -80,20 +80,33 @@ describe('Agent Template Admin API Routes (/admin/agent-templates)', () => {
 
   describe('PUT /admin/agent-templates/:templateId', () => {
     it('should update an agent template', async () => {
-        const updatePayload = { description: "New Description" };
-        mockUpdateAgentTemplate.mockResolvedValue({...templateData, ...updatePayload});
+        // The route expects a full valid payload for agentTemplateSchema.parse()
+        const fullUpdatePayload = {
+            name: templateData.name, // Keep name or provide a valid new one
+            core_logic_identifier: templateData.core_logic_identifier, // Keep or provide valid
+            description: "New Description", // The actual change
+            configurable_params_json_schema: templateData.configurable_params_json_schema
+        };
+        mockUpdateAgentTemplate.mockResolvedValue({...templateData, ...fullUpdatePayload});
         const res = await request(app)
             .put('/admin/agent-templates/tpl-1')
-            .send(updatePayload);
+            .send(fullUpdatePayload);
         expect(res.status).toBe(200);
         expect(res.body.description).toBe("New Description");
-        expect(mockUpdateAgentTemplate).toHaveBeenCalledWith('tpl-1', updatePayload);
+        // The service function updateAgentTemplate receives the full payload due to schema parsing in route
+        expect(mockUpdateAgentTemplate).toHaveBeenCalledWith('tpl-1', fullUpdatePayload);
     });
      it('should return 404 if template not found for update', async () => {
         mockUpdateAgentTemplate.mockResolvedValue(null);
+        // Payload must still be valid for agentTemplateSchema.parse() to pass before service call
+        const validPayloadForNotFound = {
+            name: "Any Valid Name",
+            core_logic_identifier: "any_valid_core_id",
+            description: "New Desc"
+        };
         const res = await request(app)
             .put('/admin/agent-templates/tpl-nonexist')
-            .send({ description: "New Desc" });
+            .send(validPayloadForNotFound);
         expect(res.status).toBe(404);
     });
   });
@@ -103,16 +116,21 @@ describe('Agent Template Admin API Routes (/admin/agent-templates)', () => {
         mockDeleteAgentTemplate.mockResolvedValue(templateData);
         const res = await request(app)
             .delete('/admin/agent-templates/tpl-1');
-        expect(res.status).toBe(200);
+        expect(res.status).toBe(200); // Route returns 200 with body
+        expect(res.body.message).toBe('Agent template deleted successfully');
         expect(res.body.template).toEqual(templateData);
         expect(mockDeleteAgentTemplate).toHaveBeenCalledWith('tpl-1');
     });
     it('should return 409 if template in use', async () => {
-        mockDeleteAgentTemplate.mockRejectedValue(new Error('violates foreign key constraint "configured_agents_template_id_fkey"'));
+        const dbError = new Error('DB error simulating FK violation');
+        (dbError as any).code = '23503';
+        (dbError as any).constraint = 'configured_agents_template_id_fkey';
+        mockDeleteAgentTemplate.mockRejectedValue(dbError);
+
         const res = await request(app)
             .delete('/admin/agent-templates/tpl-1');
         expect(res.status).toBe(409);
-        expect(res.body.message).toContain('Cannot delete template: It is currently in use');
+        expect(res.body.message).toContain('Conflict: This agent template is currently in use');
     });
   });
 

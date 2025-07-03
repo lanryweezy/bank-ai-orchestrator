@@ -1,22 +1,78 @@
-// For Workflow Definitions
-export interface WorkflowStepTransition {
-  to: string; // Name of the next step
-  description?: string; // Optional description of the transition logic
-  condition_type?: 'always' | 'on_output_value'; // Default to 'always' if not present
-  // For 'on_output_value' conditions:
-  field?: string; // Path to field in previous task's output_data_json (e.g., "reviewOutcome", "extractedData.amount")
-  operator?: '==' | '!=' | '>' | '<' | '>=' | '<=' | 'contains' | 'not_contains' | 'exists' | 'not_exists';
-  value?: any; // Value to compare against for operators that require a value
+// For Workflow Definitions (matches Zod schemas in workflowService.ts)
+export interface SingleConditionType {
+  field: string;
+  operator: '==' | '!=' | '>' | '<' | '>=' | '<=' | 'contains' | 'not_contains' | 'exists' | 'not_exists' | 'regex';
+  value?: any;
 }
+
+export interface ConditionGroupType {
+  logical_operator: 'AND' | 'OR';
+  conditions: Array<SingleConditionType | ConditionGroupType>; // Recursive
+}
+
+export interface WorkflowStepTransition {
+  to: string;
+  description?: string;
+  condition_type?: 'always' | 'conditional';
+  condition_group?: ConditionGroupType;
+}
+
+// For error handling config within a step
+export interface RetryPolicyType {
+  max_attempts?: number;
+  delay_seconds?: number;
+  backoff_strategy?: 'fixed' | 'exponential';
+  jitter?: boolean;
+}
+
+export interface OnFailureActionType {
+  action?: 'fail_workflow' | 'transition_to_step' | 'continue_with_error' | 'manual_intervention';
+  next_step?: string;
+  error_output_namespace?: string;
+}
+
+export interface ErrorHandlingType {
+  retry_policy?: RetryPolicyType;
+  on_failure?: OnFailureActionType;
+}
+
+// For human task specific definitions
+export interface HumanTaskEscalationPolicyType {
+  after_minutes: number;
+  action: 'reassign_to_role' | 'notify_manager_role' | 'custom_event';
+  target_role?: string;
+  custom_event_name?: string;
+}
+
+// For external_api_call step specific definitions
+export interface ExternalApiCallStepConfigType {
+  url_template: string;
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  headers_template?: Record<string, string>;
+  query_params_template?: Record<string, string>;
+  body_template?: any;
+  timeout_seconds?: number;
+  success_criteria?: {
+    status_codes?: number[];
+  };
+}
+
 
 // Define a recursive type for steps, as branches can contain steps
 export interface BaseWorkflowStepDefinition {
   name: string;
-  type: 'agent_execution' | 'human_review' | 'data_input' | 'decision' | 'parallel' | 'join' | 'end' | 'sub_workflow'; // Added sub_workflow
+  type: 'agent_execution' | 'human_review' | 'data_input' | 'decision' | 'parallel' | 'join' | 'end' | 'sub_workflow' | 'external_api_call';
   description?: string;
-  agent_core_logic_identifier?: string;
+
+  // Type-specific configurations
+  agent_core_logic_identifier?: string; // For agent_execution
+  external_api_call_config?: ExternalApiCallStepConfigType; // For external_api_call
+
+  // For human_review, data_input, decision steps
   assigned_role?: string;
   form_schema?: Record<string, any>;
+  deadline_minutes?: number;
+  escalation_policy?: HumanTaskEscalationPolicyType;
 
   // For 'parallel' type
   branches?: WorkflowBranch[];
@@ -24,14 +80,14 @@ export interface BaseWorkflowStepDefinition {
 
   // For 'sub_workflow' type
   sub_workflow_name?: string;
-  sub_workflow_version?: number; // Optional: if not provided, latest active is used
-  input_mapping?: Record<string, string>; // Maps parent context to sub-workflow inputs e.g. {"subInput": "parent.value"}
-  // output_namespace is already defined below, can be used for sub-workflow outputs too
+  sub_workflow_version?: number;
+  input_mapping?: Record<string, string>;
 
   transitions?: WorkflowStepTransition[];
   final_status?: 'approved' | 'rejected' | 'completed';
   default_input?: Record<string, any>;
   output_namespace?: string;
+  error_handling?: ErrorHandlingType; // Common error handling
 }
 
 // A branch is essentially a list of steps
@@ -105,15 +161,22 @@ export interface Task {
   workflow_id?: string; // Joined from workflow_runs -> workflows
   workflow_name?: string; // Joined
   step_name_in_workflow: string;
-  // Updated task type to include sub_workflow
   type: 'agent_execution' | 'human_review' | 'data_input' | 'decision' | 'sub_workflow';
   assigned_to_agent_id?: string | null;
   assigned_to_user_id?: string | null;
-  status: 'pending' | 'assigned' | 'in_progress' | 'completed' | 'failed' | 'skipped' | 'requires_escalation';
+  assigned_to_role?: string | null; // Added
+  status: 'pending' | 'assigned' | 'in_progress' | 'completed' | 'failed' | 'skipped' | 'requires_escalation'; // Consider 'delegated', 'escalated'
   input_data_json?: Record<string, any> | null;
   output_data_json?: Record<string, any> | null;
-  due_date?: string | null;
-  sub_workflow_run_id?: string | null; // Added to match DB schema
+  // due_date?: string | null; // Original field, can be superseded by deadline_at
+  sub_workflow_run_id?: string | null;
   created_at: string;
   updated_at: string;
+
+  // New fields for enhanced human task management
+  deadline_at?: string | null; // ISO datetime string
+  escalation_policy_json?: HumanTaskEscalationPolicyType | null; // Parsed from JSONB
+  is_delegated?: boolean;
+  delegated_by_user_id?: string | null;
+  retry_count?: number;
 }
