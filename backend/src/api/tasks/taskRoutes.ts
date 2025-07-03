@@ -6,11 +6,13 @@ import {
     taskInputSchema, // For validating output data primarily in completeTask
     createTaskComment,
     getTaskComments,
-    taskCommentSchema
+    taskCommentSchema,
+    delegateTask // Import delegateTask service function
 } from '../../services/taskService';
 import { processTaskCompletionAndContinueWorkflow } from '../../services/workflowRunService'; // Use this to handle completion
 import { authenticateToken, isBankUser, isPlatformAdmin } // Assuming isBankUser for general task ops
     from '../../middleware/authMiddleware';
+import { z } from 'zod'; // Import Zod for request body validation
 
 const router = express.Router();
 
@@ -208,5 +210,41 @@ router.get('/:taskId/comments', async (req: express.Request, res: express.Respon
 
 
 // Other task actions like claim, assign, update_details could be added here.
+
+// POST /api/tasks/:taskId/delegate - Delegate a task
+const delegateTaskBodySchema = z.object({
+  targetUserId: z.string().uuid("Invalid target user ID format."),
+});
+
+router.post('/:taskId/delegate', async (req: express.Request, res: express.Response) => {
+  try {
+    const { taskId } = req.params;
+    const delegatingUserId = req.user!.userId; // User performing the delegation
+
+    const { targetUserId } = delegateTaskBodySchema.parse(req.body);
+
+    if (delegatingUserId === targetUserId) {
+      return res.status(400).json({ message: "Cannot delegate task to yourself." });
+    }
+
+    // taskService.delegateTask will handle authorization (is delegatingUser the current assignee?)
+    const delegatedTask = await delegateTask(taskId, delegatingUserId, targetUserId);
+
+    res.status(200).json(delegatedTask);
+  } catch (error: any) {
+    if (error instanceof ZodError) {
+      return res.status(400).json({ message: 'Validation failed', errors: error.errors });
+    }
+    if (error.message.includes('not found') || error.message.includes('cannot be delegated')) {
+        return res.status(404).json({ message: error.message });
+    }
+    if (error.message.includes('not the current assignee')) {
+        return res.status(403).json({ message: error.message });
+    }
+    console.error('Error delegating task:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 
 export default router;

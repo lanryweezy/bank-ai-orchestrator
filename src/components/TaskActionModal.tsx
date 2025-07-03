@@ -25,6 +25,15 @@ const TaskActionModal: React.FC<TaskActionModalProps> = ({ task, isOpen, onClose
   const [error, setError] = useState<string | null>(null);
   const [commentError, setCommentError] = useState<string | null>(null);
 
+  // Delegation State
+  const [showDelegateForm, setShowDelegateForm] = useState<boolean>(false);
+  const [targetUserIdToDelegate, setTargetUserIdToDelegate] = useState<string>('');
+  const [delegationError, setDelegationError] = useState<string|null>(null);
+  const [isDelegating, setIsDelegating] = useState<boolean>(false);
+
+  // Placeholder for current user ID - replace with actual auth context logic
+  const currentLoggedInUserId = localStorage.getItem('userId'); // Example: Get from localStorage
+
 
   const fetchComments = async (currentTask: Task) => {
     if (!currentTask) return;
@@ -99,6 +108,27 @@ const TaskActionModal: React.FC<TaskActionModalProps> = ({ task, isOpen, onClose
     }
   };
 
+  const handleDelegateSubmit = async () => {
+    if (!task || !targetUserIdToDelegate.trim()) return;
+    setIsDelegating(true);
+    setDelegationError(null);
+    try {
+      const updatedTask = await apiClient<Task>(`/tasks/${task.task_id}/delegate`, {
+        method: 'POST',
+        data: { targetUserId: targetUserIdToDelegate },
+      });
+      onTaskCompleted(updatedTask); // Notify parent to refresh/update
+      setShowDelegateForm(false);    // Close delegation form
+      setTargetUserIdToDelegate('');
+      onClose(); // Close the main modal as task state has changed significantly
+    } catch (err: any) {
+      setDelegationError(err.data?.message || err.message || "Failed to delegate task.");
+      console.error("Delegation error:", err);
+    } finally {
+      setIsDelegating(false);
+    }
+  };
+
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -118,15 +148,33 @@ const TaskActionModal: React.FC<TaskActionModalProps> = ({ task, isOpen, onClose
               <Label className="font-semibold">Task ID:</Label>
               <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded">{task.task_id}</p>
             </div>
-           {task.due_date && (
+            {task.deadline_at && (
             <div>
-                <Label className="font-semibold">Due Date:</Label>
-                <p className={`text-sm p-1 rounded ${new Date(task.due_date) < new Date() && task.status !== 'completed' ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-700 bg-gray-50'}`}>
-                    {format(new Date(task.due_date), "PPpp")}
-                    {new Date(task.due_date) < new Date() && task.status !== 'completed' && <span className="ml-1">(Overdue)</span>}
+                <Label className="font-semibold">Deadline:</Label>
+                <p className={`text-sm p-1 rounded ${new Date(task.deadline_at) < new Date() && task.status !== 'completed' ? 'text-red-600 bg-red-50 font-semibold' : 'text-gray-700 bg-gray-50'}`}>
+                    {format(new Date(task.deadline_at), "PPpp")}
+                    {new Date(task.deadline_at) < new Date() && task.status !== 'completed' && <span className="ml-1">(Overdue)</span>}
                 </p>
             </div>
             )}
+            {task.is_delegated && (
+                 <div>
+                    <Label className="font-semibold">Delegation Status:</Label>
+                    <p className="text-sm text-purple-700 bg-purple-50 p-2 rounded">
+                        This task was delegated.
+                        {task.delegated_by_user_id && ` (Original delegator ID: ${task.delegated_by_user_id.substring(0,8)}...)`}
+                    </p>
+                </div>
+            )}
+            {task.status === 'requires_escalation' && (
+                 <div>
+                    <Label className="font-semibold">Escalation Status:</Label>
+                    <p className="text-sm text-orange-700 bg-orange-50 p-2 rounded">
+                        This task requires escalation / special attention.
+                    </p>
+                </div>
+            )}
+
 
             {task.input_data_json && Object.keys(task.input_data_json).length > 0 && (
               <div>
@@ -223,12 +271,62 @@ const TaskActionModal: React.FC<TaskActionModalProps> = ({ task, isOpen, onClose
           <DialogClose asChild>
             <Button type="button" variant="outline">Close</Button>
           </DialogClose>
-          {canCompleteTask && (
+
+          {/* Delegate Button - show if task assigned to current user and not terminal */}
+          {task.assigned_to_user_id === currentLoggedInUserId &&
+           !['completed', 'failed', 'skipped'].includes(task.status) &&
+           !showDelegateForm && (
+            <Button type="button" variant="outline" onClick={() => { setShowDelegateForm(true); setDelegationError(null); }} className="mr-auto">
+                Delegate Task
+            </Button>
+          )}
+
+          {canCompleteTask && !showDelegateForm && (
             <Button type="button" onClick={handleSubmit} disabled={isSubmitting} className="banking-gradient text-white">
               {isSubmitting ? 'Submitting...' : 'Complete Task'}
             </Button>
           )}
         </DialogFooter>
+
+        {/* Delegation Form/Modal section */}
+        {showDelegateForm && task && (
+            <div className="mt-4 pt-4 border-t">
+                <DialogHeader>
+                    <DialogTitle className="text-lg">Delegate Task: {task.step_name_in_workflow}</DialogTitle>
+                    <DialogDescription>Assign this task to another user.</DialogDescription>
+                </DialogHeader>
+                <div className="py-4 space-y-3">
+                    <div>
+                        <Label htmlFor="targetUserId">Target User ID</Label>
+                        <Input
+                            id="targetUserId"
+                            value={targetUserIdToDelegate}
+                            onChange={(e) => setTargetUserIdToDelegate(e.target.value)}
+                            placeholder="Enter User ID to delegate to"
+                        />
+                        {/* TODO: Replace with a user selection dropdown/search */}
+                    </div>
+                    {delegationError && (
+                        <Alert variant="destructive">
+                            <Terminal className="h-4 w-4" />
+                            <AlertTitle>Delegation Error</AlertTitle>
+                            <AlertDescription>{delegationError}</AlertDescription>
+                        </Alert>
+                    )}
+                </div>
+                <DialogFooter>
+                     <Button type="button" variant="outline" onClick={() => {setShowDelegateForm(false); setTargetUserIdToDelegate('');}}>Cancel</Button>
+                     <Button
+                        type="button"
+                        onClick={handleDelegateSubmit}
+                        disabled={isDelegating || !targetUserIdToDelegate.trim()}
+                        className="bg-purple-600 hover:bg-purple-700 text-white"
+                     >
+                        {isDelegating ? 'Delegating...' : 'Confirm Delegation'}
+                    </Button>
+                </DialogFooter>
+            </div>
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, Edit, Trash2, RefreshCw, ShieldAlert, GitCommit, Eye, History } from 'lucide-react'; // Added GitCommit, History
+import { PlusCircle, Edit, Trash2, RefreshCw, ShieldAlert, GitCommit, Eye, History, CheckCircle2 } from 'lucide-react'; // Added CheckCircle2
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from '@/components/ui/badge';
@@ -47,7 +47,7 @@ const WorkflowDefinitionsListPageAdmin: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [showOnlyActiveLatest]);
+  }, [showAllVersions]); // Corrected dependency
 
   useEffect(() => {
     fetchDefinitions();
@@ -71,8 +71,20 @@ const WorkflowDefinitionsListPageAdmin: React.FC = () => {
   };
 
   const handleCreateNewVersion = (workflowName: string) => {
-    // Navigate to the edit page, passing the workflowName to signify creating a new version
     navigate(`/admin/workflow-definitions/new-version/${workflowName}`);
+  };
+
+  const handleActivateVersion = async (workflowId: string, name: string, version: number) => {
+    if (window.confirm(`Are you sure you want to activate version ${version} of workflow "${name}"? This will deactivate any other active version of this workflow.`)) {
+      setError(null);
+      try {
+        await apiClient(`/admin/workflows/${workflowId}/activate`, { method: 'PUT' });
+        fetchDefinitions(); // Refresh list to show updated active status
+      } catch (err: any) {
+        console.error('Failed to activate workflow version:', err);
+        setError(err.data?.message || err.message || 'Failed to activate workflow version.');
+      }
+    }
   };
 
 
@@ -216,6 +228,17 @@ const WorkflowDefinitionsListPageAdmin: React.FC = () => {
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
+                        {!def.is_active && (
+                           <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleActivateVersion(def.workflow_id, def.name, def.version)}
+                            className="text-green-600 hover:text-green-700"
+                            title="Activate this version"
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"

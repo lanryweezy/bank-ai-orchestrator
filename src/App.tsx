@@ -30,7 +30,9 @@ import { Navigate } from "react-router-dom";
 import AgentTemplatesListPageAdmin from "./pages/Admin/AgentTemplatesListPage";
 import AgentTemplateEditPage from "./pages/Admin/AgentTemplateEditPage";
 import WorkflowDefinitionsListPageAdmin from "./pages/Admin/WorkflowDefinitionsListPage";
-import WorkflowDefinitionEditPage from "./pages/Admin/WorkflowDefinitionEditPage"; // Import new page
+import WorkflowDefinitionEditPage from "./pages/Admin/WorkflowDefinitionEditPage";
+import TriggersListPageAdmin from "./pages/Admin/TriggersListPage"; // Import Triggers List Page
+import TriggerEditPage from "./pages/Admin/TriggerEditPage"; // Import Trigger Edit Page
 
 
 const queryClient = new QueryClient();
@@ -162,6 +164,31 @@ const App = () => (
             }
           />
 
+          {/* Admin Triggers Routes */}
+          <Route
+            path="/admin/triggers"
+            element={
+              <ProtectedRoute allowedRoles={['platform_admin']}>
+                <TriggersListPageAdmin />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/triggers/new"
+            element={
+              <ProtectedRoute allowedRoles={['platform_admin']}>
+                <TriggerEditPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/triggers/edit/:triggerId"
+            element={
+              <ProtectedRoute allowedRoles={['platform_admin']}>
+                <TriggerEditPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Legacy/Example Routes (Review and protect as needed) */}
           <Route path="/team" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
