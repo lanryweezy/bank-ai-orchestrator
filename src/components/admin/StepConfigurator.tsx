@@ -1,7 +1,14 @@
 import React from 'react';
-import { WorkflowStepDefinition, BaseWorkflowStepDefinition } from '@/types/workflows';
+import {
+    WorkflowStepDefinition,
+    BaseWorkflowStepDefinition,
+    ExternalApiCallStepConfigType, // Import this type
+    OnFailureActionType, // Import this type
+    HumanTaskEscalationPolicyType // Import this type
+} from '@/types/workflows';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -225,8 +232,27 @@ const StepConfigurator: React.FC<StepConfiguratorProps> = ({ step, onStepChange,
                                   rows={4} className="font-mono text-xs" placeholder={`{ "key": "{{context.value}}" }`} />
                     </div>
                 )}
-                {/* TODO: UI for timeout, success_criteria */}
-                <p className="text-xs text-gray-500 mt-2">Timeout and Success Criteria fields to be added.</p>
+                <div className="grid grid-cols-2 gap-x-4 mt-2">
+                    <div>
+                        <Label htmlFor={`extapi-timeout-${step.name}`} className="text-xs">Timeout (seconds)</Label>
+                        <Input type="number" id={`extapi-timeout-${step.name}`} min="1"
+                               value={step.external_api_call_config?.timeout_seconds || 30}
+                               onChange={(e) => onStepChange({...step, external_api_call_config: {...step.external_api_call_config, timeout_seconds: parseInt(e.target.value) || 30} as ExternalApiCallStepConfigType})}
+                               className="h-8 text-xs"/>
+                    </div>
+                    <div>
+                        <Label htmlFor={`extapi-successcodes-${step.name}`} className="text-xs">Success Status Codes (CSV)</Label>
+                        <Input type="text" id={`extapi-successcodes-${step.name}`}
+                               value={step.external_api_call_config?.success_criteria?.status_codes?.join(',') || '200,201,202,204'}
+                               onChange={(e) => {
+                                   const codes = e.target.value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+                                   onStepChange({...step, external_api_call_config: {...step.external_api_call_config, success_criteria: { status_codes: codes }} as ExternalApiCallStepConfigType});
+                               }}
+                               placeholder="e.g., 200,201"
+                               className="h-8 text-xs"/>
+                    </div>
+                </div>
+                 <p className="text-xs text-gray-500 mt-1">Define HTTP status codes that indicate a successful call.</p>
             </div>
         )}
 
@@ -244,8 +270,27 @@ const StepConfigurator: React.FC<StepConfiguratorProps> = ({ step, onStepChange,
                        onChange={(e) => handleChange('deadline_minutes', e.target.value ? parseInt(e.target.value) : undefined)}
                        className="h-8 text-xs" placeholder="Optional"/>
             </div>
-            {/* TODO: UI for form_schema (JSON editor?) and escalation_policy (modal editor) */}
-            <p className="text-xs text-gray-500">UI for Form Schema and Escalation Policy to be added.</p>
+            <div>
+                <Label className="text-xs">Form Schema (JSON)</Label>
+                <Textarea
+                    value={typeof step.form_schema === 'string' ? step.form_schema : JSON.stringify(step.form_schema || {}, null, 2)}
+                    onChange={(e) => {
+                        let newSchema = {};
+                        try { newSchema = JSON.parse(e.target.value); } catch { /* keep empty or old if invalid */ }
+                        handleChange('form_schema', newSchema);
+                    }}
+                    rows={4}
+                    className="font-mono text-xs mt-1"
+                    placeholder={'{\n  "type": "object",\n  "properties": { ... }\n}'}
+                />
+            </div>
+            <div>
+                <Label className="text-xs font-medium mt-2 block">Escalation Policy</Label>
+                <EscalationPolicyEditor
+                    policy={step.escalation_policy}
+                    onPolicyChange={(updatedPolicy) => handleChange('escalation_policy', updatedPolicy)}
+                />
+            </div>
           </div>
         )}
 
