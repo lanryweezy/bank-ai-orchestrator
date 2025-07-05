@@ -271,18 +271,43 @@ const StepConfigurator: React.FC<StepConfiguratorProps> = ({ step, onStepChange,
                        className="h-8 text-xs" placeholder="Optional"/>
             </div>
             <div>
-                <Label className="text-xs">Form Schema (JSON)</Label>
+                <Label htmlFor={`step-form_schema-${step.name}`} className="text-xs">Form Schema (JSON)</Label>
                 <Textarea
-                    value={typeof step.form_schema === 'string' ? step.form_schema : JSON.stringify(step.form_schema || {}, null, 2)}
+                    id={`step-form_schema-${step.name}`}
+                    value={typeof step.form_schema === 'object' ? JSON.stringify(step.form_schema, null, 2) : step.form_schema || ''}
                     onChange={(e) => {
-                        let newSchema = {};
-                        try { newSchema = JSON.parse(e.target.value); } catch { /* keep empty or old if invalid */ }
+                        let newSchema: any = {}; // Keep as any for flexibility, backend Zod validates
+                        try {
+                            if (e.target.value.trim() === "") {
+                                newSchema = undefined; // Allow clearing to undefined
+                            } else {
+                                newSchema = JSON.parse(e.target.value);
+                            }
+                        } catch (jsonError) {
+                            // If not valid JSON, could store as string or show error.
+                            // For now, let's assume it might be an invalid intermediate state.
+                            // Or, simply don't update `form_schema` if it's invalid JSON string.
+                            // This part depends on how strictly we want to validate on front-end vs. relying on backend.
+                            // To allow typing, we might need local state for the string and parse on blur/submit.
+                            // For simplicity now, if it fails parse, it might not update correctly.
+                            // A better approach would use a dedicated JSON editor component.
+                            console.warn("Invalid JSON in form_schema textarea");
+                            // To prevent breaking, we could pass the string value, and let backend validate
+                            // handleChange('form_schema', e.target.value); // This would store string
+                            // Or try to parse, and if error, don't update or set an error state.
+                            // Let's try to update only if valid, or if empty.
+                            if (e.target.value.trim() === "" || JSON.parse(e.target.value)) {
+                               handleChange('form_schema', newSchema);
+                            }
+                            return; // Or set a local error state for the textarea
+                        }
                         handleChange('form_schema', newSchema);
                     }}
-                    rows={4}
+                    rows={6} // Increased rows
                     className="font-mono text-xs mt-1"
-                    placeholder={'{\n  "type": "object",\n  "properties": { ... }\n}'}
+                    placeholder={'{\n  "type": "object",\n  "properties": {\n    "fieldName": {"type": "string", "description": "Field Description"}\n  }\n}'}
                 />
+                <p className="text-xs text-gray-500 mt-0.5">Define the JSON schema for the task form. Leave empty if no form is needed.</p>
             </div>
             <div>
                 <Label className="text-xs font-medium mt-2 block">Escalation Policy</Label>
@@ -292,6 +317,91 @@ const StepConfigurator: React.FC<StepConfiguratorProps> = ({ step, onStepChange,
                 />
             </div>
           </div>
+        )}
+
+        {/* Parallel Step Config */}
+        {step.type === 'parallel' && (
+            <div className="p-3 border rounded-md bg-gray-50 space-y-3 mt-2">
+                <h5 className="text-sm font-medium text-gray-700">Parallel Step Configuration</h5>
+                <div>
+                    <Label htmlFor={`parallel-join_on-${step.name}`} className="text-xs">Join On Step Name</Label>
+                    <Select
+                        value={step.join_on || ""}
+                        onValueChange={(val) => handleChange('join_on', val)}
+                    >
+                        <SelectTrigger className="h-8 text-xs mt-1">
+                            <SelectValue placeholder="Select the 'join' step for these branches" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {allStepNames.filter(name => name !== step.name /* TODO: and is a 'join' type step */).map(name => (
+                                <SelectItem key={name} value={name} className="text-xs">{name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <p className="text-xs text-gray-500 mt-0.5">The 'join' step where all parallel branches will converge.</p>
+                </div>
+                <div className="mt-2">
+                    <Label className="text-xs font-medium">Branches</Label>
+                    {(step.branches || []).map((branch, branchIndex) => (
+                        <Card key={branchIndex} className="p-3 mt-1 bg-white">
+                            <div className="flex justify-between items-center mb-2">
+                                <Input
+                                    value={branch.name}
+                                    onChange={(e) => {
+                                        const newBranches = [...(step.branches || [])];
+                                        newBranches[branchIndex] = {...newBranches[branchIndex], name: e.target.value};
+                                        handleChange('branches', newBranches);
+                                    }}
+                                    placeholder={`Branch ${branchIndex + 1} Name`}
+                                    className="h-8 text-xs font-medium flex-grow mr-2"
+                                />
+                                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-red-500"
+                                    onClick={() => {
+                                        const newBranches = (step.branches || []).filter((_, i) => i !== branchIndex);
+                                        handleChange('branches', newBranches);
+                                    }}
+                                ><Trash2 size={14}/></Button>
+                            </div>
+                            <div>
+                                <Label htmlFor={`branch-start_step-${branchIndex}`} className="text-xs">Branch Start Step</Label>
+                                <Select
+                                    value={branch.start_step || ""}
+                                    onValueChange={(val) => {
+                                        const newBranches = [...(step.branches || [])];
+                                        newBranches[branchIndex] = {...newBranches[branchIndex], start_step: val};
+                                        handleChange('branches', newBranches);
+                                    }}
+                                >
+                                    <SelectTrigger className="h-8 text-xs mt-1">
+                                        <SelectValue placeholder="Select branch start step" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {(branch.steps || []).map(s => s.name).map(name => (
+                                            <SelectItem key={name} value={name} className="text-xs">{name}</SelectItem>
+                                        ))}
+                                         {/* TODO: Allow creating new steps within branch or ensure steps exist */}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="mt-2 pl-2 border-l-2">
+                                <p className="text-xs text-gray-600 mb-1">Steps in this branch: (Full editor coming soon)</p>
+                                {(branch.steps || []).map((s, si) => <p key={si} className="text-xs p-1 bg-gray-100 rounded mb-1">{s.name} ({s.type})</p>)}
+                                <Button type="button" variant="link" size="xs" className="text-xs"
+                                    onClick={() => console.log("TODO: Implement Add Step to branch", branchIndex)}>
+                                    + Add step to branch
+                                </Button>
+                            </div>
+                        </Card>
+                    ))}
+                     <Button type="button" variant="outline" size="xs" className="mt-2 text-xs"
+                        onClick={() => {
+                            const newBranchName = `branch_${(step.branches || []).length + 1}`;
+                            const newBranch = { name: newBranchName, start_step: "", steps: [] };
+                            handleChange('branches', [...(step.branches || []), newBranch]);
+                        }}
+                    >+ Add Branch</Button>
+                </div>
+            </div>
         )}
 
 
