@@ -195,22 +195,6 @@ const renderFormField = (
       </div>
     );
   }
-  // Fallback for unsupported types or more complex structures (e.g. direct JSON editing)
-  return (
-    <div key={key} className="space-y-2">
-      <Label htmlFor={fieldIdPath}>{label} (JSON)</Label>
-      <Textarea
-        id={fieldIdPath}
-        value={typeof value === 'string' ? value : (value ? JSON.stringify(value, null, 2) : (propSchema.type === 'array' ? '[]' : '{}'))}
-        onChange={(e) => onChange(e.target.value)} // Store as string, parse on submit
-        placeholder={`Enter JSON for ${key}`}
-        rows={3}
-          className="font-mono text-sm"
-        />
-        <p className="text-xs text-muted-foreground">Enter a valid JSON array.</p>
-      </div>
-    );
-  }
   // Fallback for unsupported types or more complex structures
   return (
     <div key={key} className="space-y-2">
@@ -222,10 +206,10 @@ const renderFormField = (
         placeholder={`Enter JSON for ${key}`}
         rows={3}
         className="font-mono text-sm"
-      />
-       <p className="text-xs text-muted-foreground">Enter valid JSON for this field.</p>
-    </div>
-  );
+       />
+        <p className="text-xs text-muted-foreground">Enter valid JSON for this field.</p>
+     </div>
+   );
 };
 
 

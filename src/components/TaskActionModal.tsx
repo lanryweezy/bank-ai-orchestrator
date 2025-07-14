@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button';
-import { Label } from "@/components/ui/label';
-import { Textarea } from "@/components/ui/textarea';
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Task, TaskComment } from '@/types/workflows'; // Added TaskComment
 import apiClient from '@/services/apiClient';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
