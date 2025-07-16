@@ -19,20 +19,63 @@ const LoginPage: React.FC = () => {
     e.preventDefault();
     setError(null);
     setLoading(true);
+    
     try {
+      // Hardcoded test credentials
+      if (username === 'admin' && password === 'admin123') {
+        // Mock admin login
+        const mockAdminUser = {
+          id: '1',
+          username: 'admin',
+          email: 'admin@example.com',
+          role: 'platform_admin',
+          full_name: 'System Administrator'
+        };
+        const mockToken = 'mock-admin-token-' + Date.now();
+        
+        localStorage.setItem('authToken', mockToken);
+        localStorage.setItem('userRole', 'platform_admin');
+        localStorage.setItem('user', JSON.stringify(mockAdminUser));
+        
+        console.log('Admin login successful');
+        navigate('/dashboard');
+        return;
+      }
+      
+      if (username === 'user' && password === 'user123') {
+        // Mock regular user login
+        const mockUser = {
+          id: '2',
+          username: 'user',
+          email: 'user@example.com',
+          role: 'user',
+          full_name: 'Test User'
+        };
+        const mockToken = 'mock-user-token-' + Date.now();
+        
+        localStorage.setItem('authToken', mockToken);
+        localStorage.setItem('userRole', 'user');
+        localStorage.setItem('user', JSON.stringify(mockUser));
+        
+        console.log('User login successful');
+        navigate('/dashboard');
+        return;
+      }
+
+      // If credentials don't match hardcoded ones, try API call
       const response = await apiClient<{ user: any; token: string }>('/auth/login', {
         method: 'POST',
         data: { username, password },
       });
-      // Handle successful login
-      console.log('Login successful:', response);
-      localStorage.setItem('authToken', response.token); // Simple token storage
+      
+      localStorage.setItem('authToken', response.token);
       localStorage.setItem('user', JSON.stringify(response.user));
-      // login(response.user, response.token); // If using AuthContext
-      navigate('/'); // Redirect to dashboard or home
+      localStorage.setItem('userRole', response.user.role || 'user');
+      navigate('/dashboard');
+      
     } catch (err: any) {
       console.error('Login error:', err);
-      setError(err.data?.message || err.message || 'Failed to login. Please check your credentials.');
+      setError('Invalid credentials. Try admin/admin123 or user/user123 for testing.');
     } finally {
       setLoading(false);
     }
@@ -72,6 +115,14 @@ const LoginPage: React.FC = () => {
               />
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
+            
+            {/* Test Credentials Info */}
+            <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded border">
+              <p className="font-semibold mb-1">Test Credentials:</p>
+              <p>Admin: <span className="font-mono">admin / admin123</span></p>
+              <p>User: <span className="font-mono">user / user123</span></p>
+            </div>
+            
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Logging in...' : 'Login'}
             </Button>
