@@ -36,7 +36,10 @@ const WorkflowDefinitionEditPage: React.FC = () => {
   const [definition, setDefinition] = useState<WorkflowDefinitionInput>({
     name: baseWorkflowName || '',
     description: '',
-    definition_json: {},
+    definition_json: {
+      steps: [],
+      start_step: ""
+    },
     version: 1, // This will be informative in UI, actual version set by backend for new versions
     is_active: true,
   });
@@ -59,7 +62,10 @@ const WorkflowDefinitionEditPage: React.FC = () => {
         setDefinition({
           name: data.name,
           description: data.description || '',
-          definition_json: data.definition_json || {},
+        definition_json: data.definition_json || {
+          steps: [],
+          start_step: ""
+        },
           version: data.version,
           is_active: data.is_active,
         });
@@ -86,7 +92,10 @@ const WorkflowDefinitionEditPage: React.FC = () => {
             ...prev,
             name: latestVersion.name, // Name is fixed
             description: latestVersion.description || '',
-            definition_json: latestVersion.definition_json || {},
+            definition_json: latestVersion.definition_json || {
+              steps: [],
+              start_step: ""
+            },
             is_active: true, // New versions default to active
             version: (latestVersion.version || 0) + 1 // Informational, backend sets actual
           }));
@@ -108,7 +117,16 @@ const WorkflowDefinitionEditPage: React.FC = () => {
         setLoading(false);
       }
     } else { // Create Brand New Mode
-      setDefinition({ name: '', description: '', definition_json: {}, version: 1, is_active: true });
+      setDefinition({ 
+        name: '', 
+        description: '', 
+        definition_json: {
+          steps: [],
+          start_step: ""
+        }, 
+        version: 1, 
+        is_active: true 
+      });
       setDefinitionJsonString(defaultJsonStructure);
       setPageTitle('Create New Workflow Definition');
       setLoading(false);

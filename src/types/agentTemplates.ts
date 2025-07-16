@@ -10,6 +10,14 @@ export interface AgentTemplate {
   updated_at: string;
 }
 
+// Input type for creating/editing agent templates
+export interface AgentTemplateInput {
+  name: string;
+  description?: string;
+  core_logic_identifier: string;
+  configurable_params_json_schema?: Record<string, any>;
+}
+
 // May also need types for ConfiguredAgent later
 export interface ConfiguredAgent {
   agent_id: string;

@@ -4,6 +4,7 @@ import { WorkflowDefinition } from '@/types/workflows';
 import WorkflowDefinitionCard from './WorkflowDefinitionCard';
 import { Button } from '@/components/ui/button';
 import { Plus, RefreshCw, Send } from 'lucide-react';
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";

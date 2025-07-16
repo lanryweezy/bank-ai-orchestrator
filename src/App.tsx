@@ -149,14 +149,6 @@ const App = () => (
             path="/admin/workflow-definitions/new-version/:workflowName"
             element={
               <ProtectedRoute allowedRoles={['platform_admin']}>
-                <WorkflowDefinitionEditPage /> {/* Re-use edit page, it will need to handle this mode */}
-              </ProtectedRoute>
-            }
-          />
-           <Route
-            path="/admin/workflow-definitions/new-version/:baseWorkflowName"
-            element={
-              <ProtectedRoute allowedRoles={['platform_admin']}>
                 <WorkflowDefinitionEditPage />
               </ProtectedRoute>
             }

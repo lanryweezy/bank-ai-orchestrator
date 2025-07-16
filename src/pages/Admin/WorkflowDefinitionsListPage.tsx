@@ -5,6 +5,7 @@ import apiClient from '@/services/apiClient';
 import { WorkflowDefinition } from '@/types/workflows';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PlusCircle, Edit, Trash2, RefreshCw, ShieldAlert, GitCommit, Eye, History } from 'lucide-react'; // Added GitCommit, History
@@ -47,7 +48,7 @@ const WorkflowDefinitionsListPageAdmin: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [showOnlyActiveLatest]);
+  }, [showAllVersions]);
 
   useEffect(() => {
     fetchDefinitions();

@@ -7,7 +7,7 @@ import { Task, TaskComment } from '@/types/workflows'; // Added TaskComment
 import apiClient from '@/services/apiClient';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Terminal, MessageSquare, Send, UserCircle } from "lucide-react"; // Added icons
-import { formatDistanceToNow } from 'date-fns'; // For relative time
+import { formatDistanceToNow, format } from 'date-fns'; // For relative time
 
 interface TaskActionModalProps {
   task: Task | null;

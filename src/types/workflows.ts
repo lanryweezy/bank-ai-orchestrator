@@ -65,6 +65,21 @@ export interface WorkflowDefinition {
   updated_at: string;
 }
 
+// Input type for creating/editing workflow definitions
+export interface WorkflowDefinitionInput {
+  name: string;
+  description?: string;
+  definition_json: {
+    name?: string;
+    description?: string;
+    initialContextSchema?: Record<string, any>;
+    steps: WorkflowStepDefinition[];
+    start_step: string;
+  };
+  version?: number;
+  is_active?: boolean;
+}
+
 // For Task Comments
 export interface TaskComment {
   comment_id: string;

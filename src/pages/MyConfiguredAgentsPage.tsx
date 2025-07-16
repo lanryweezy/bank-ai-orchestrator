@@ -4,7 +4,7 @@ import apiClient from '@/services/apiClient';
 import { ConfiguredAgent } from '@/types/agentTemplates';
 import ConfiguredAgentCard from '@/components/ConfiguredAgentCard';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, RefreshCw } from 'lucide-react';
+import { PlusCircle, RefreshCw, Cog } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
