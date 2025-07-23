@@ -10,14 +10,14 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full">
+      <div className="flex min-h-screen w-full bg-futuristic-background text-futuristic-foreground">
         <AppSidebar />
         <SidebarInset className="flex-1">
-          <header className="flex h-16 items-center gap-2 px-4 border-b">
+          <header className="flex h-16 items-center gap-2 px-4 border-b border-sidebar-border">
             <SidebarTrigger className="-ml-1" />
             <div className="flex-1" />
           </header>
-          <main className="flex-1 p-6 bg-gray-50">
+          <main className="flex-1 p-6">
             {children}
           </main>
         </SidebarInset>
