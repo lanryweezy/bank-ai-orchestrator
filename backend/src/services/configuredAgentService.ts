@@ -37,12 +37,17 @@ export const createConfiguredAgent = async (data: ConfiguredAgentInput, userId: 
 };
 
 export const getAllConfiguredAgents = async (userId?: string) => { // Optional userId to filter by user
+  let queryText = 'SELECT ca.*, at.name as template_name FROM configured_agents ca JOIN agent_templates at ON ca.template_id = at.template_id';
+  const queryParams = [];
+
   if (userId) {
-    const result = await query('SELECT ca.*, at.name as template_name FROM configured_agents ca JOIN agent_templates at ON ca.template_id = at.template_id WHERE ca.user_id = $1 ORDER BY ca.bank_specific_name ASC', [userId]);
-    return result.rows;
+    queryText += ' WHERE ca.user_id = $1';
+    queryParams.push(userId);
   }
-  // For platform admin, maybe list all? Or enforce user_id always? For now, only by user.
-  const result = await query('SELECT ca.*, at.name as template_name FROM configured_agents ca JOIN agent_templates at ON ca.template_id = at.template_id ORDER BY ca.bank_specific_name ASC');
+
+  queryText += ' ORDER BY ca.bank_specific_name ASC';
+
+  const result = await query(queryText, queryParams);
   return result.rows;
 };
 

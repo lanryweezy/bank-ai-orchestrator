@@ -45,18 +45,17 @@ export const getAllWorkflowRuns = async (filters: {workflowId?: string, status?:
     `;
     const conditions: string[] = [];
     const params: any[] = [];
-    let paramIndex = 1;
 
     if (filters.workflowId) {
-        conditions.push(`wr.workflow_id = $${paramIndex++}`);
+        conditions.push(`wr.workflow_id = $${conditions.length + 1}`);
         params.push(filters.workflowId);
     }
     if (filters.status) {
-        conditions.push(`wr.status = $${paramIndex++}`);
+        conditions.push(`wr.status = $${conditions.length + 1}`);
         params.push(filters.status);
     }
     if (filters.userId) { // If filtering by user who triggered it
-        conditions.push(`wr.triggering_user_id = $${paramIndex++}`);
+        conditions.push(`wr.triggering_user_id = $${conditions.length + 1}`);
         params.push(filters.userId);
     }
 

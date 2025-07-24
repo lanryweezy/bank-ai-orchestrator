@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import GenericCard from './GenericCard';
 import { mockLoans } from '@/data/mockLoans';
 import apiClient from '@/services/apiClient';
 import { Button } from '@/components/ui/button';
@@ -20,18 +20,7 @@ import {
   Users
 } from 'lucide-react';
 
-interface LoanApplication {
-  id: string;
-  customerName: string;
-  customerBVN: string;
-  loanType: string;
-  requestedAmount: number;
-  status: 'pending' | 'under_review' | 'approved' | 'rejected' | 'disbursed';
-  creditScore: number;
-  applicationDate: string;
-  purpose: string;
-  repaymentPeriod: number;
-}
+import { LoanApplication } from '@/types/loan';
 
 const LoanManagement: React.FC = () => {
   const [applications, setApplications] = useState<LoanApplication[]>([]);
@@ -54,6 +43,11 @@ const LoanManagement: React.FC = () => {
     fetchLoans();
   }, []);
 
+  /**
+   * Returns the color for the status badge based on the status.
+   * @param status The status of the loan application.
+   * @returns The color for the status badge.
+   */
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'approved': return 'bg-green-100 text-green-800';
@@ -65,6 +59,11 @@ const LoanManagement: React.FC = () => {
     }
   };
 
+  /**
+   * Returns the icon for the status badge based on the status.
+   * @param status The status of the loan application.
+   * @returns The icon for the status badge.
+   */
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'approved': return <CheckCircle className="h-4 w-4 text-green-500" />;
@@ -185,28 +184,15 @@ const LoanManagement: React.FC = () => {
         <TabsContent value="applications" className="space-y-4">
           <div className="space-y-4">
             {applications.map((application) => (
-              <Card key={application.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="p-3 bg-blue-100 rounded-lg">
-                        <CreditCard className="h-6 w-6 text-blue-600" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-lg">{application.customerName}</h3>
-                        <p className="text-sm text-gray-600">Application ID: {application.id}</p>
-                        <p className="text-sm text-gray-600">BVN: {application.customerBVN}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <Badge className={getStatusColor(application.status)}>
-                        {application.status.replace('_', ' ')}
-                      </Badge>
-                      <p className="text-sm text-gray-500 mt-1">{application.applicationDate}</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+              <GenericCard
+                key={application.id}
+                title={application.customerName}
+                subtitle={`Application ID: ${application.id}`}
+                icon={<CreditCard className="h-6 w-6 text-blue-600" />}
+                status={application.status.replace('_', ' ')}
+                statusColor={getStatusColor(application.status)}
+              >
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
                     <div>
                       <p className="text-sm text-gray-600">Loan Type</p>
                       <p className="font-medium">{application.loanType}</p>
@@ -255,8 +241,7 @@ const LoanManagement: React.FC = () => {
                       )}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+              </GenericCard>
             ))}
           </div>
         </TabsContent>

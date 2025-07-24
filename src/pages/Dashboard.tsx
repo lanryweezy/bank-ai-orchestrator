@@ -5,12 +5,11 @@ import AgentCard from '@/components/AgentCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
-  Users, 
-  Bot, 
+  Users2,
+  BrainCircuit,
   TrendingUp, 
   Mail, 
   Plus,
-  Brain,
   Activity,
   Zap
 } from 'lucide-react';
@@ -56,7 +55,7 @@ const Dashboard = () => {
       title: 'Active Agents',
       value: '12',
       change: '+3',
-      icon: Bot,
+      icon: BrainCircuit,
       color: 'text-blue-600'
     },
     {
@@ -145,7 +144,7 @@ const Dashboard = () => {
         <Card className="bg-sidebar border-sidebar-border">
           <CardHeader>
             <CardTitle className="flex items-center text-futuristic-foreground">
-              <Brain className="h-5 w-5 mr-2 text-futuristic-secondary" />
+              <BrainCircuit className="h-5 w-5 mr-2 text-futuristic-secondary" />
               Meta-Agent Insights
             </CardTitle>
           </CardHeader>

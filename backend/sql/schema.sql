@@ -29,6 +29,8 @@ EXECUTE FUNCTION update_updated_at_column();
 
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_created_at ON users(created_at);
+CREATE INDEX idx_users_updated_at ON users(updated_at);
 
 
 -- Agent Templates Table
@@ -48,6 +50,8 @@ FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
 CREATE INDEX idx_agent_templates_name ON agent_templates(name);
+CREATE INDEX idx_agent_templates_created_at ON agent_templates(created_at);
+CREATE INDEX idx_agent_templates_updated_at ON agent_templates(updated_at);
 
 
 -- Configured Agents Table (Instances of Agent Templates)
@@ -71,6 +75,8 @@ EXECUTE FUNCTION update_updated_at_column();
 CREATE INDEX idx_configured_agents_template_id ON configured_agents(template_id);
 CREATE INDEX idx_configured_agents_user_id ON configured_agents(user_id);
 CREATE INDEX idx_configured_agents_status ON configured_agents(status);
+CREATE INDEX idx_configured_agents_created_at ON configured_agents(created_at);
+CREATE INDEX idx_configured_agents_updated_at ON configured_agents(updated_at);
 
 
 -- Workflows Table
@@ -93,6 +99,8 @@ EXECUTE FUNCTION update_updated_at_column();
 
 CREATE INDEX idx_workflows_name_version ON workflows(name, version);
 CREATE INDEX idx_workflows_is_active ON workflows(is_active);
+CREATE INDEX idx_workflows_created_at ON workflows(created_at);
+CREATE INDEX idx_workflows_updated_at ON workflows(updated_at);
 
 
 -- Workflow Runs Table (Instances of Workflow Execution)
@@ -120,6 +128,8 @@ CREATE INDEX idx_workflow_runs_workflow_id ON workflow_runs(workflow_id);
 CREATE INDEX idx_workflow_runs_status ON workflow_runs(status);
 CREATE INDEX idx_workflow_runs_current_step_name ON workflow_runs(current_step_name);
 CREATE INDEX idx_workflow_runs_triggering_user_id ON workflow_runs(triggering_user_id);
+CREATE INDEX idx_workflow_runs_created_at ON workflow_runs(created_at);
+CREATE INDEX idx_workflow_runs_updated_at ON workflow_runs(updated_at);
 
 
 -- Tasks Table (Individual steps within a workflow run, for agents or humans)
@@ -159,6 +169,8 @@ CREATE INDEX idx_tasks_status ON tasks(status);
 CREATE INDEX idx_tasks_assigned_to_agent_id ON tasks(assigned_to_agent_id);
 CREATE INDEX idx_tasks_assigned_to_user_id ON tasks(assigned_to_user_id);
 CREATE INDEX idx_tasks_assigned_to_role ON tasks(assigned_to_role);
+CREATE INDEX idx_tasks_created_at ON tasks(created_at);
+CREATE INDEX idx_tasks_updated_at ON tasks(updated_at);
 
 
 -- Task Comments Table
@@ -178,6 +190,8 @@ EXECUTE FUNCTION update_updated_at_column();
 
 CREATE INDEX idx_task_comments_task_id ON task_comments(task_id);
 CREATE INDEX idx_task_comments_user_id ON task_comments(user_id);
+CREATE INDEX idx_task_comments_created_at ON task_comments(created_at);
+CREATE INDEX idx_task_comments_updated_at ON task_comments(updated_at);
 
 
 -- Note: The chk_task_assignment constraint might need refinement based on exact assignment logic.

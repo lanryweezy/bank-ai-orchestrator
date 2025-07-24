@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import GenericCard from './GenericCard';
 import { mockTransactions } from '@/data/mockTransactions';
 import apiClient from '@/services/apiClient';
 import { Button } from '@/components/ui/button';
@@ -21,18 +21,7 @@ import {
   Clock
 } from 'lucide-react';
 
-interface Transaction {
-  id: string;
-  type: 'credit' | 'debit';
-  amount: number;
-  description: string;
-  channel: 'USSD' | 'Mobile App' | 'Internet Banking' | 'ATM' | 'POS' | 'Agent';
-  status: 'successful' | 'pending' | 'failed';
-  timestamp: string;
-  reference: string;
-  customerName: string;
-  accountNumber: string;
-}
+import { Transaction } from '@/types/transaction';
 
 const TransactionManagement: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -56,6 +45,11 @@ const TransactionManagement: React.FC = () => {
     fetchTransactions();
   }, []);
 
+  /**
+   * Returns the color for the status badge based on the status.
+   * @param status The status of the transaction.
+   * @returns The color for the status badge.
+   */
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'successful': return 'bg-green-100 text-green-800';
@@ -65,6 +59,11 @@ const TransactionManagement: React.FC = () => {
     }
   };
 
+  /**
+   * Returns the icon for the status badge based on the status.
+   * @param status The status of the transaction.
+   * @returns The icon for the status badge.
+   */
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'successful': return <CheckCircle className="h-4 w-4 text-green-500" />;
@@ -216,35 +215,20 @@ const TransactionManagement: React.FC = () => {
         <TabsContent value="all" className="space-y-4">
           <div className="space-y-3">
             {filteredTransactions.map((transaction) => (
-              <Card key={transaction.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className={`p-3 rounded-lg ${
-                        transaction.type === 'credit' ? 'bg-green-100' : 'bg-red-100'
-                      }`}>
-                        {transaction.type === 'credit' ? (
-                          <ArrowDownLeft className="h-5 w-5 text-green-600" />
-                        ) : (
-                          <ArrowUpRight className="h-5 w-5 text-red-600" />
-                        )}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold">{transaction.description}</h3>
-                        <div className="flex items-center space-x-4 text-sm text-gray-600">
-                          <span>{transaction.customerName}</span>
-                          <span>•</span>
-                          <span>{transaction.accountNumber}</span>
-                          <span>•</span>
-                          <div className="flex items-center space-x-1">
-                            {getChannelIcon(transaction.channel)}
-                            <span>{transaction.channel}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="text-right">
+              <GenericCard
+                key={transaction.id}
+                title={transaction.description}
+                subtitle={`${transaction.customerName} • ${transaction.accountNumber}`}
+                icon={
+                  transaction.type === 'credit' ? (
+                    <ArrowDownLeft className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <ArrowUpRight className="h-5 w-5 text-red-600" />
+                  )
+                }
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-right">
                       <div className="flex items-center space-x-3">
                         <div>
                           <p className={`text-lg font-semibold ${
@@ -279,8 +263,7 @@ const TransactionManagement: React.FC = () => {
                       )}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+              </GenericCard>
             ))}
           </div>
         </TabsContent>

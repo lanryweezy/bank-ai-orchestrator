@@ -3,13 +3,13 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { 
-  Bot, 
-  Users, 
-  Brain, 
-  Database, 
-  Mail, 
-  Activity, 
-  Settings, 
+  LayoutDashboard,
+  Users2,
+  BrainCircuit,
+  DatabaseZap,
+  Mail,
+  Activity,
+  Settings,
   Building2,
   ChevronRight,
   Zap,
@@ -22,17 +22,17 @@ import {
 } from 'lucide-react';
 
 const navigation = [
-  { name: 'Overview', href: '/', icon: Activity },
-  { name: 'Agent Builder', href: '/builder', icon: Bot },
-  { name: 'Knowledge Base', href: '/knowledge', icon: Database },
-  { name: 'Agent Monitor', href: '/monitor', icon: Brain },
+  { name: 'Overview', href: '/', icon: LayoutDashboard },
+  { name: 'Agent Builder', href: '/builder', icon: BrainCircuit },
+  { name: 'Knowledge Base', href: '/knowledge', icon: DatabaseZap },
+  { name: 'Agent Monitor', href: '/monitor', icon: Activity },
   { name: 'Task Manager', href: '/tasks', icon: CheckSquare },
   { name: 'Workflows', href: '/workflows', icon: GitBranch },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Security', href: '/security', icon: Shield },
   { name: 'Integrations', href: '/integrations', icon: Plug },
   { name: 'Notifications', href: '/notifications', icon: Bell },
-  { name: 'Team Management', href: '/team', icon: Users },
+  { name: 'Team Management', href: '/team', icon: Users2 },
   { name: 'Email Integration', href: '/email', icon: Mail },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];

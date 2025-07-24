@@ -256,10 +256,10 @@ export const getAllWorkflowVersionsByName = async (name: string) => {
 
 
 export const getAllWorkflowDefinitions = async (onlyActive: boolean = false) => {
-  let queryString = 'SELECT * FROM workflows ORDER BY name ASC, version DESC';
+  let queryString = 'SELECT * FROM workflows';
+  const queryParams = [];
+
   if (onlyActive) {
-    // For user-facing lists, show only the single, latest active version for each workflow name.
-    // This ensures users see a clean list of runnable workflows.
     queryString = `
       SELECT w1.*
       FROM workflows w1
@@ -269,12 +269,13 @@ export const getAllWorkflowDefinitions = async (onlyActive: boolean = false) => 
           WHERE is_active = true
           GROUP BY name
       ) w2 ON w1.name = w2.name AND w1.version = w2.max_version
-      WHERE w1.is_active = true  -- Redundant due to subquery but good for clarity
-      ORDER BY w1.name ASC;
+      WHERE w1.is_active = true
     `;
   }
-  // If not onlyActive (e.g., for admin views), return all versions of all workflows.
-  const result = await query(queryString);
+
+  queryString += ' ORDER BY name ASC, version DESC';
+
+  const result = await query(queryString, queryParams);
   return result.rows;
 };
 

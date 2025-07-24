@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import GenericCard from './GenericCard';
 import { Button } from '@/components/ui/button';
 import AddCustomerModal from './AddCustomerModal';
 import { Input } from '@/components/ui/input';
@@ -20,18 +20,7 @@ import {
   CheckCircle
 } from 'lucide-react';
 
-interface Customer {
-  id: string;
-  name: string;
-  bvn: string;
-  phone: string;
-  email: string;
-  accountTier: 'Tier 1' | 'Tier 2' | 'Tier 3';
-  kycStatus: 'pending' | 'verified' | 'rejected';
-  accountNumber: string;
-  balance: number;
-  createdDate: string;
-}
+import { Customer } from '@/types/customer';
 
 import { mockCustomers } from '@/data/mockCustomers';
 import apiClient from '@/services/apiClient';
@@ -58,6 +47,11 @@ const CustomerManagement: React.FC = () => {
     fetchCustomers();
   }, []);
 
+  /**
+   * Returns the color for the status badge based on the status.
+   * @param status The status of the customer.
+   * @returns The color for the status badge.
+   */
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'verified': return 'bg-green-100 text-green-800';
@@ -67,6 +61,11 @@ const CustomerManagement: React.FC = () => {
     }
   };
 
+  /**
+   * Returns the icon for the status badge based on the status.
+   * @param status The status of the customer.
+   * @returns The icon for the status badge.
+   */
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'verified': return <CheckCircle className="h-4 w-4 text-green-500" />;
@@ -151,22 +150,15 @@ const CustomerManagement: React.FC = () => {
         <TabsContent value="customers" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredCustomers.map((customer) => (
-              <Card key={customer.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-blue-100 rounded-full">
-                        <Users className="h-5 w-5 text-blue-600" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold">{customer.name}</h3>
-                        <p className="text-sm text-gray-600">{customer.accountNumber}</p>
-                      </div>
-                    </div>
-                    {getStatusIcon(customer.kycStatus)}
-                  </div>
-
-                  <div className="space-y-3">
+              <GenericCard
+                key={customer.id}
+                title={customer.name}
+                subtitle={customer.accountNumber}
+                icon={<Users className="h-5 w-5 text-blue-600" />}
+                status={customer.kycStatus}
+                statusColor={getStatusColor(customer.kycStatus)}
+              >
+                <div className="space-y-3">
                     <div className="flex items-center space-x-2 text-sm">
                       <Phone className="h-4 w-4 text-gray-400" />
                       <span>{customer.phone}</span>
@@ -204,8 +196,7 @@ const CustomerManagement: React.FC = () => {
                       Edit
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
+              </GenericCard>
             ))}
           </div>
         </TabsContent>

@@ -3,7 +3,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Bot, Activity, Mail, Settings, Play, Pause } from 'lucide-react';
+import { BrainCircuit, Activity, Mail, Settings, Play, Pause } from 'lucide-react';
 
 interface AgentCardProps {
   name: string;
@@ -37,7 +37,7 @@ const AgentCard: React.FC<AgentCardProps> = ({
 
   const getIcon = () => {
     switch (type) {
-      case 'chatbot': return <Bot className="h-6 w-6 text-futuristic-primary" />;
+      case 'chatbot': return <BrainCircuit className="h-6 w-6 text-futuristic-primary" />;
       case 'email': return <Mail className="h-6 w-6 text-futuristic-primary" />;
       default: return <Activity className="h-6 w-6 text-futuristic-primary" />;
     }
