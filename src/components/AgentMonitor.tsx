@@ -1,6 +1,8 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { mockTasks } from '@/data/mockAgentMonitor';
+import apiClient from '@/services/apiClient';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
@@ -24,30 +26,25 @@ interface Task {
 }
 
 const AgentMonitor: React.FC = () => {
-  const [tasks] = React.useState<Task[]>([
-    {
-      id: '1',
-      agentName: 'Credit Analyzer',
-      task: 'Process loan application for John Doe',
-      status: 'processing',
-      timestamp: '2 minutes ago'
-    },
-    {
-      id: '2',
-      agentName: 'Email Parser',
-      task: 'Parse customer inquiry about account balance',
-      status: 'completed',
-      timestamp: '5 minutes ago',
-      duration: 3000
-    },
-    {
-      id: '3',
-      agentName: 'KYC Validator',
-      task: 'Verify customer documents',
-      status: 'failed',
-      timestamp: '8 minutes ago'
-    }
-  ]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        // const data = await apiClient<Task[]>('/agent-monitor/tasks');
+        // setTasks(data);
+        setTasks(mockTasks); // Using mock data for now
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTasks();
+  }, []);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -66,6 +63,14 @@ const AgentMonitor: React.FC = () => {
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
 
   return (
     <div className="space-y-6">

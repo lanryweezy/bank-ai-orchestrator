@@ -1,6 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { mockTransactions } from '@/data/mockTransactions';
+import apiClient from '@/services/apiClient';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -33,46 +35,26 @@ interface Transaction {
 }
 
 const TransactionManagement: React.FC = () => {
-  const [transactions] = useState<Transaction[]>([
-    {
-      id: '1',
-      type: 'credit',
-      amount: 50000,
-      description: 'Transfer from Access Bank',
-      channel: 'Mobile App',
-      status: 'successful',
-      timestamp: '2024-01-15 14:30:25',
-      reference: 'TXN001234567',
-      customerName: 'Adebayo Johnson',
-      accountNumber: '2001234567'
-    },
-    {
-      id: '2',
-      type: 'debit',
-      amount: 25000,
-      description: 'POS Purchase - Shoprite',
-      channel: 'POS',
-      status: 'successful',
-      timestamp: '2024-01-15 12:15:10',
-      reference: 'TXN001234568',
-      customerName: 'Fatima Abubakar',
-      accountNumber: '2001234568'
-    },
-    {
-      id: '3',
-      type: 'debit',
-      amount: 5000,
-      description: 'ATM Withdrawal',
-      channel: 'ATM',
-      status: 'failed',
-      timestamp: '2024-01-15 09:45:33',
-      reference: 'TXN001234569',
-      customerName: 'Chidi Okafor',
-      accountNumber: '2001234569'
-    }
-  ]);
-
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        // const data = await apiClient<Transaction[]>('/transactions');
+        // setTransactions(data);
+        setTransactions(mockTransactions); // Using mock data for now
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTransactions();
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -111,6 +93,29 @@ const TransactionManagement: React.FC = () => {
       currency: 'NGN'
     }).format(amount);
   };
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
+
+  const [activeTab, setActiveTab] = useState('all');
+
+  const filteredTransactions = transactions
+    .filter(transaction => {
+      if (activeTab === 'all') {
+        return true;
+      }
+      return transaction.status === activeTab;
+    })
+    .filter(transaction =>
+      transaction.reference.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      transaction.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      transaction.accountNumber.includes(searchTerm)
+    );
 
   return (
     <div className="space-y-6">
@@ -200,7 +205,7 @@ const TransactionManagement: React.FC = () => {
         </Button>
       </div>
 
-      <Tabs defaultValue="all" className="w-full">
+      <Tabs defaultValue="all" className="w-full" onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="all">All Transactions</TabsTrigger>
           <TabsTrigger value="successful">Successful</TabsTrigger>
@@ -210,7 +215,7 @@ const TransactionManagement: React.FC = () => {
 
         <TabsContent value="all" className="space-y-4">
           <div className="space-y-3">
-            {transactions.map((transaction) => (
+            {filteredTransactions.map((transaction) => (
               <Card key={transaction.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">

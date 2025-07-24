@@ -1,6 +1,10 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { performanceData, timelineData, departmentData } from '@/data/mockAnalytics';
+import apiClient from '@/services/apiClient';
+import { performanceData, timelineData, departmentData } from '@/data/mockAnalytics';
+import apiClient from '@/services/apiClient';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   BarChart, 
@@ -18,29 +22,37 @@ import {
 } from 'recharts';
 
 const Analytics: React.FC = () => {
-  const performanceData = [
-    { name: 'Credit Analyzer', efficiency: 94, accuracy: 97 },
-    { name: 'Email Parser', efficiency: 88, accuracy: 91 },
-    { name: 'Chatbot', efficiency: 96, accuracy: 89 },
-    { name: 'KYC Validator', efficiency: 91, accuracy: 95 },
-    { name: 'HR Assistant', efficiency: 87, accuracy: 93 }
-  ];
+  const [analyticsData, setAnalyticsData] = useState<any>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const timelineData = [
-    { time: '00:00', tasks: 12 },
-    { time: '04:00', tasks: 8 },
-    { time: '08:00', tasks: 45 },
-    { time: '12:00', tasks: 67 },
-    { time: '16:00', tasks: 52 },
-    { time: '20:00', tasks: 23 }
-  ];
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        // const data = await apiClient<any>('/analytics');
+        // setAnalyticsData(data);
+        setAnalyticsData({
+          performanceData,
+          timelineData,
+          departmentData,
+        }); // Using mock data for now
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const departmentData = [
-    { name: 'Loans', value: 35, color: '#3B82F6' },
-    { name: 'Customer Service', value: 28, color: '#10B981' },
-    { name: 'Compliance', value: 20, color: '#F59E0B' },
-    { name: 'Operations', value: 17, color: '#EF4444' }
-  ];
+    fetchAnalytics();
+  }, []);
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -63,13 +75,13 @@ const Analytics: React.FC = () => {
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
-                      data={departmentData}
+                      data={analyticsData.departmentData}
                       cx="50%"
                       cy="50%"
                       outerRadius={80}
                       dataKey="value"
                     >
-                      {departmentData.map((entry, index) => (
+                      {analyticsData.departmentData.map((entry: any, index: number) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
@@ -85,7 +97,7 @@ const Analytics: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={timelineData}>
+                  <LineChart data={analyticsData.timelineData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="time" />
                     <YAxis />
@@ -105,7 +117,7 @@ const Analytics: React.FC = () => {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={performanceData}>
+                <BarChart data={analyticsData.performanceData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />

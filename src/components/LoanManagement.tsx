@@ -1,7 +1,10 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { mockLoans } from '@/data/mockLoans';
+import apiClient from '@/services/apiClient';
 import { Button } from '@/components/ui/button';
+import AddLoanModal from './AddLoanModal';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
@@ -31,32 +34,25 @@ interface LoanApplication {
 }
 
 const LoanManagement: React.FC = () => {
-  const [applications] = useState<LoanApplication[]>([
-    {
-      id: 'LN001',
-      customerName: 'Adebayo Johnson',
-      customerBVN: '22234567890',
-      loanType: 'Personal Loan',
-      requestedAmount: 500000,
-      status: 'under_review',
-      creditScore: 720,
-      applicationDate: '2024-01-15',
-      purpose: 'Business Expansion',
-      repaymentPeriod: 12
-    },
-    {
-      id: 'LN002',
-      customerName: 'Fatima Abubakar', 
-      customerBVN: '22234567891',
-      loanType: 'SME Loan',
-      requestedAmount: 2000000,
-      status: 'approved',
-      creditScore: 680,
-      applicationDate: '2024-01-10',
-      purpose: 'Equipment Purchase',
-      repaymentPeriod: 24
-    }
-  ]);
+  const [applications, setApplications] = useState<LoanApplication[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchLoans = async () => {
+      try {
+        // const data = await apiClient<LoanApplication[]>('/loans');
+        // setApplications(data);
+        setApplications(mockLoans); // Using mock data for now
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchLoans();
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -92,14 +88,39 @@ const LoanManagement: React.FC = () => {
     return 'text-red-600';
   };
 
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
+
+  const handleLoanAdded = (newLoan: LoanApplication) => {
+    setApplications(prevApplications => [newLoan, ...prevApplications]);
+  };
+
+  const handleLoanStatusChange = (loanId: string, newStatus: 'approved' | 'rejected') => {
+    setApplications(prevApplications =>
+      prevApplications.map(app =>
+        app.id === loanId ? { ...app, status: newStatus } : app
+      )
+    );
+  };
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Loan Management</h2>
-        <Button className="banking-gradient text-white">
-          <Calculator className="h-4 w-4 mr-2" />
-          New Application
-        </Button>
+        <AddLoanModal onLoanAdded={handleLoanAdded} />
       </div>
 
       {/* Statistics Cards */}
@@ -224,10 +245,10 @@ const LoanManagement: React.FC = () => {
                       </Button>
                       {application.status === 'under_review' && (
                         <>
-                          <Button variant="outline" size="sm" className="text-green-600">
+                          <Button variant="outline" size="sm" className="text-green-600" onClick={() => handleLoanStatusChange(application.id, 'approved')}>
                             Approve
                           </Button>
-                          <Button variant="outline" size="sm" className="text-red-600">
+                          <Button variant="outline" size="sm" className="text-red-600" onClick={() => handleLoanStatusChange(application.id, 'rejected')}>
                             Reject
                           </Button>
                         </>

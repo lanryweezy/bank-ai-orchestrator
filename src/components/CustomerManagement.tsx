@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import AddCustomerModal from './AddCustomerModal';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -32,35 +33,30 @@ interface Customer {
   createdDate: string;
 }
 
-const CustomerManagement: React.FC = () => {
-  const [customers] = useState<Customer[]>([
-    {
-      id: '1',
-      name: 'Adebayo Johnson',
-      bvn: '22234567890',
-      phone: '+2348123456789',
-      email: 'adebayo.j@email.com',
-      accountTier: 'Tier 3',
-      kycStatus: 'verified',
-      accountNumber: '2001234567',
-      balance: 2500000,
-      createdDate: '2024-01-15'
-    },
-    {
-      id: '2',
-      name: 'Fatima Abubakar',
-      bvn: '22234567891',
-      phone: '+2348123456788',
-      email: 'fatima.a@email.com',
-      accountTier: 'Tier 2',
-      kycStatus: 'pending',
-      accountNumber: '2001234568',
-      balance: 150000,
-      createdDate: '2024-01-20'
-    }
-  ]);
+import { mockCustomers } from '@/data/mockCustomers';
+import apiClient from '@/services/apiClient';
 
+const CustomerManagement: React.FC = () => {
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        // const data = await apiClient<Customer[]>('/customers');
+        // setCustomers(data);
+        setCustomers(mockCustomers); // Using mock data for now
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCustomers();
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -87,14 +83,46 @@ const CustomerManagement: React.FC = () => {
     }).format(amount);
   };
 
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
+
+  const handleCustomerAdded = (newCustomer: Customer) => {
+    setCustomers(prevCustomers => [newCustomer, ...prevCustomers]);
+  };
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
+
+  const [activeTab, setActiveTab] = useState('customers');
+
+  const filteredCustomers = customers
+    .filter(customer => {
+      if (activeTab === 'kyc-pending') {
+        return customer.kycStatus === 'pending';
+      }
+      return true;
+    })
+    .filter(customer =>
+      customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      customer.bvn.includes(searchTerm) ||
+      customer.accountNumber.includes(searchTerm)
+    );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Customer Management</h2>
-        <Button className="banking-gradient text-white">
-          <UserPlus className="h-4 w-4 mr-2" />
-          Add Customer
-        </Button>
+        <AddCustomerModal onCustomerAdded={handleCustomerAdded} />
       </div>
 
       <div className="flex items-center space-x-4 mb-6">
@@ -113,7 +141,7 @@ const CustomerManagement: React.FC = () => {
         </Button>
       </div>
 
-      <Tabs defaultValue="customers" className="w-full">
+      <Tabs defaultValue="customers" className="w-full" onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="customers">All Customers</TabsTrigger>
           <TabsTrigger value="kyc-pending">KYC Pending</TabsTrigger>
@@ -122,7 +150,7 @@ const CustomerManagement: React.FC = () => {
 
         <TabsContent value="customers" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {customers.map((customer) => (
+            {filteredCustomers.map((customer) => (
               <Card key={customer.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between mb-4">
