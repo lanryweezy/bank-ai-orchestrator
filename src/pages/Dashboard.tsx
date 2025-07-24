@@ -89,10 +89,10 @@ const Dashboard = () => {
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Banking AI Platform</h1>
-              <p className="text-gray-600 mt-1">Manage your AI agents and automation workflows</p>
+              <h1 className="text-3xl font-bold text-futuristic-foreground">Banking AI Platform</h1>
+              <p className="text-futuristic-foreground mt-1">Manage your AI agents and automation workflows</p>
             </div>
-            <Button className="banking-gradient text-white">
+            <Button className="bg-futuristic-primary text-white">
               <Plus className="h-4 w-4 mr-2" />
               Create Agent
             </Button>
@@ -102,15 +102,15 @@ const Dashboard = () => {
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {stats.map((stat, index) => (
-            <Card key={index} className="hover:shadow-lg transition-shadow">
+            <Card key={index} className="bg-sidebar border-sidebar-border hover:shadow-lg transition-shadow">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                    <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                    <p className="text-sm font-medium text-sidebar-foreground">{stat.title}</p>
+                    <p className="text-2xl font-bold text-futuristic-foreground">{stat.value}</p>
                     <p className={`text-xs ${stat.color}`}>{stat.change} from last month</p>
                   </div>
-                  <div className={`p-3 bg-gray-50 rounded-lg ${stat.color}`}>
+                  <div className={`p-3 bg-sidebar-primary rounded-lg ${stat.color}`}>
                     <stat.icon className="h-6 w-6" />
                   </div>
                 </div>
@@ -122,8 +122,8 @@ const Dashboard = () => {
         {/* Active Agents */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">Active AI Agents</h2>
-            <Button variant="outline" size="sm">
+            <h2 className="text-xl font-semibold text-futuristic-foreground">Active AI Agents</h2>
+            <Button variant="outline" size="sm" className="border-sidebar-border text-sidebar-foreground">
               <Activity className="h-4 w-4 mr-2" />
               View All
             </Button>
@@ -142,32 +142,32 @@ const Dashboard = () => {
         </div>
 
         {/* Meta Agent Insights */}
-        <Card>
+        <Card className="bg-sidebar border-sidebar-border">
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Brain className="h-5 w-5 mr-2 text-purple-600" />
+            <CardTitle className="flex items-center text-futuristic-foreground">
+              <Brain className="h-5 w-5 mr-2 text-futuristic-secondary" />
               Meta-Agent Insights
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
-                <h4 className="font-medium text-blue-900">Performance Optimization</h4>
-                <p className="text-blue-700 text-sm mt-1">
+              <div className="p-4 bg-sidebar-primary rounded-lg border-l-4 border-futuristic-primary">
+                <h4 className="font-medium text-futuristic-foreground">Performance Optimization</h4>
+                <p className="text-sidebar-foreground text-sm mt-1">
                   Credit Analyzer accuracy improved by 3% after recent knowledge base update
                 </p>
               </div>
               
-              <div className="p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
-                <h4 className="font-medium text-yellow-900">Training Recommendation</h4>
-                <p className="text-yellow-700 text-sm mt-1">
+              <div className="p-4 bg-sidebar-primary rounded-lg border-l-4 border-futuristic-secondary">
+                <h4 className="font-medium text-futuristic-foreground">Training Recommendation</h4>
+                <p className="text-sidebar-foreground text-sm mt-1">
                   Email Parser needs additional training on new loan document formats
                 </p>
               </div>
               
-              <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
-                <h4 className="font-medium text-green-900">System Health</h4>
-                <p className="text-green-700 text-sm mt-1">
+              <div className="p-4 bg-sidebar-primary rounded-lg border-l-4 border-futuristic-accent">
+                <h4 className="font-medium text-futuristic-foreground">System Health</h4>
+                <p className="text-sidebar-foreground text-sm mt-1">
                   All agents operating within normal parameters. No issues detected.
                 </p>
               </div>

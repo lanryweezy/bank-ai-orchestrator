@@ -61,7 +61,7 @@ const Sidebar = () => {
 								key={item.name}
 								to={item.href}
 								className={cn(
-									"group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-all duration-200",
+									"group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-all duration-300 ease-in-out transform hover:scale-105",
 									isActive
 										? "bg-sidebar-accent text-sidebar-accent-foreground"
 										: "text-sidebar-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground"
@@ -83,7 +83,7 @@ const Sidebar = () => {
 				</nav>
 
 				<div className="flex-shrink-0 p-4">
-					<div className="bg-sidebar-accent rounded-lg p-3">
+					<div className="bg-sidebar-accent rounded-lg p-3 shadow-lg">
 						<div className="flex items-center">
 							<Zap className="h-5 w-5 text-sidebar-accent-foreground" />
 							<div className="ml-3">
