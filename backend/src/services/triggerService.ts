@@ -24,8 +24,8 @@ const webhookConfigSchema = z.object({
 export type WebhookConfig = z.infer<typeof webhookConfigSchema>;
 
 
-// Base Trigger Input (for creation and update)
-export const triggerInputSchema = z.object({
+// Base schema for operations that need partial/omit
+const baseTriggerInputSchema = z.object({
   name: z.string().min(3).max(255),
   description: z.string().optional().nullable(),
   workflow_id: z.string().uuid("Invalid workflow ID format."),
@@ -33,7 +33,10 @@ export const triggerInputSchema = z.object({
   configuration_json: z.union([scheduledConfigSchema, webhookConfigSchema, z.record(z.any())]), // Allow generic for event_bus for now
   is_enabled: z.boolean().optional().default(true),
   created_by_user_id: z.string().uuid(), // Should be set by the system from authenticated user
-}).refine(data => {
+});
+
+// Base Trigger Input (for creation and update) with validation
+export const triggerInputSchema = baseTriggerInputSchema.refine(data => {
   if (data.type === 'scheduled') {
     return scheduledConfigSchema.safeParse(data.configuration_json).success;
   }
@@ -49,8 +52,11 @@ export const triggerInputSchema = z.object({
 
 export type TriggerInput = z.infer<typeof triggerInputSchema>;
 
+// Update schema for partial operations
+export const triggerUpdateSchema = baseTriggerInputSchema.partial().omit({ created_by_user_id: true });
+
 // Full WorkflowTrigger type (matches DB table)
-export const workflowTriggerSchema = triggerInputSchema.extend({
+export const workflowTriggerSchema = baseTriggerInputSchema.extend({
   trigger_id: z.string().uuid(),
   last_triggered_at: z.string().datetime({ offset: true }).optional().nullable(),
   created_at: z.string().datetime({ offset: true }),
@@ -117,7 +123,7 @@ export const updateTrigger = async (triggerId: string, data: Partial<Omit<Trigge
    };
   // We need to ensure configuration_json is re-validated if type or config itself changes
   // created_by_user_id should not be updatable through this general update method.
-  const validatedData = triggerInputSchema.omit({ created_by_user_id: true }).parse(mergedData);
+  const validatedData = baseTriggerInputSchema.omit({ created_by_user_id: true }).parse(mergedData);
 
 
   // If type is webhook and path_identifier is being changed, check uniqueness
@@ -156,7 +162,7 @@ export const updateLastTriggeredAt = async (triggerId: string): Promise<void> =>
     await query('UPDATE workflow_triggers SET last_triggered_at = NOW() WHERE trigger_id = $1', [triggerId]);
 };
 
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import { createWorkflowRun } from './workflowRunService'; // For triggering workflows
 
 // Store active cron jobs to prevent duplicates or to manage them (e.g., stop/restart)

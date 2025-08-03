@@ -38,7 +38,7 @@ export const createNotification = async (input: CreateNotificationInput): Promis
     return result.rows[0];
 };
 
-interface GetNotificationsOptions {
+export interface GetNotificationsOptions {
     limit?: number;
     offset?: number;
     unreadOnly?: boolean;

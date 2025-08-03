@@ -4,12 +4,12 @@ import {
     workflowDefinitionSchema,
     createWorkflowDefinition,
     updateWorkflowDefinition,
-    DANGEROUS_deleteWorkflowDefinition,
+    deleteWorkflowDefinition,
     getAllWorkflowDefinitions,
     getWorkflowDefinitionById,
     createNewWorkflowVersionFromLatest as createNewWorkflowVersion,
-    getAllWorkflowVersionsByName as getAllWorkflowDefinitionsByName,
     activateWorkflowVersion,
+    workflowDefinitionInputSchema,
 } from '../../services/workflowService';
 import { authenticateToken, isPlatformAdmin } from '../../middleware/authMiddleware';
 
@@ -114,7 +114,7 @@ router.get('/', async (req: express.Request, res: express.Response) => {
     const onlyActive = req.query.onlyActive === 'true';
     // For admins, getAllWorkflowDefinitions(false) shows all, true shows only active.
     // The user-facing route /api/workflows already filters by onlyActive=true by default.
-    const workflows = await getAllWorkflowDefinitions(onlyActive);
+    const workflows = await getAllWorkflowDefinitions(onlyActive ? { isActive: true } : {});
     res.status(200).json(workflows);
   } catch (error) {
     console.error('Error fetching all workflow definitions for admin:', error);
@@ -270,7 +270,7 @@ router.delete('/:workflowId', async (req: express.Request, res: express.Response
     // if (runs.rows.length > 0) {
     //   return res.status(409).json({ message: 'Conflict: This workflow definition is used by existing workflow runs. Consider deactivating it instead.' });
     // }
-    const workflow = await DANGEROUS_deleteWorkflowDefinition(req.params.workflowId);
+    const workflow = await deleteWorkflowDefinition(req.params.workflowId);
     if (!workflow) {
       return res.status(404).json({ message: 'Workflow definition (version) not found' });
     }
@@ -351,10 +351,7 @@ router.post('/name/:name/versions', async (req: express.Request, res: express.Re
             is_active: true, // is_active for the new version, service handles deactivating others
         }).partial().parse(req.body);
 
-        const newVersion = await createNewWorkflowVersion(workflowName, {
-            ...data,
-            definition_json: data.definition_json || {}
-        });
+        const newVersion = await createNewWorkflowVersion(workflowName, data);
         res.status(201).json(newVersion);
     } catch (error: any) {
         if (error instanceof ZodError) {
@@ -402,7 +399,7 @@ router.post('/name/:name/versions', async (req: express.Request, res: express.Re
 router.get('/name/:name/versions', async (req: express.Request, res: express.Response) => {
     try {
         const workflowName = req.params.name;
-        const versions = await getAllWorkflowDefinitionsByName(workflowName);
+        const versions = await getAllWorkflowDefinitions({ name: workflowName });
         if (versions.length === 0) {
             // Distinguish between "no workflow with this name" vs "workflow exists but has no versions" (should not happen with current logic)
             // For simplicity, if service returns empty, assume name not found or no versions.

@@ -102,9 +102,9 @@ router.get('/summary', isBankUser, async (req: express.Request, res: express.Res
 
         let runs;
         if (userRole === 'platform_admin') {
-            runs = await getAllRecentWorkflowRuns(limit);
+            runs = await getAllWorkflowRuns();
         } else {
-            runs = await getRecentWorkflowRunsForUser(userId, limit);
+            runs = await getAllWorkflowRuns({ userId: userId });
         }
 
         res.status(200).json(runs);

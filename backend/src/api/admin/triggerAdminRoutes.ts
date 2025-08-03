@@ -4,6 +4,7 @@ import { ZodError } from 'zod';
 import { authenticateToken, isPlatformAdmin } from '../../middleware/authMiddleware';
 import {
     triggerInputSchema,
+    triggerUpdateSchema,
     createTrigger,
     getTriggerById,
     updateTrigger,
@@ -174,7 +175,7 @@ router.get('/workflow/:workflowId', async (req: express.Request, res: express.Re
  */
 router.put('/:triggerId', async (req: express.Request, res: express.Response) => {
     try {
-        const dataToUpdate = triggerInputSchema.partial().omit({ created_by_user_id: true }).parse(req.body);
+        const dataToUpdate = triggerUpdateSchema.parse(req.body);
         if (Object.keys(dataToUpdate).length === 0) {
             return res.status(400).json({ message: "No update fields provided." });
         }

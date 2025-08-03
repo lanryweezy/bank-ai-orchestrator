@@ -19,7 +19,13 @@ export const taskInputSchema = z.object({
 });
 export type TaskInput = z.infer<typeof taskInputSchema>;
 
-import { HumanTaskEscalationPolicy } from './workflowService'; // Import for escalation policy type
+// Import for escalation policy type (now defined locally as we simplified the workflow service)
+interface HumanTaskEscalationPolicy {
+  after_minutes: number;
+  action: 'reassign_to_role' | 'notify_manager_role' | 'custom_event';
+  target_role?: string;
+  custom_event_name?: string;
+}
 
 // For internal creation by workflow engine
 export interface TaskCreationData {

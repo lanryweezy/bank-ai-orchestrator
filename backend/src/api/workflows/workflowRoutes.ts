@@ -19,7 +19,7 @@ router.use(authenticateToken);
 // GET /api/workflows - List all active workflow definitions
 router.get('/', isBankUser, async (req: express.Request, res: express.Response) => {
   try {
-    const workflows = await getAllWorkflowDefinitions(true); // Only active
+    const workflows = await getAllWorkflowDefinitions({ isActive: true }); // Only active
     res.status(200).json(workflows);
   } catch (error) {
     console.error('Error fetching workflow definitions:', error);

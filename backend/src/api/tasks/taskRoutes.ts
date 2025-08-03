@@ -273,7 +273,8 @@ router.get('/summary', async (req: express.Request, res: express.Response) => {
         console.error('Error fetching task summary:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
-=======
+});
+
 /**
  * @openapi
  * /tasks/{taskId}/delegate:
@@ -336,7 +337,6 @@ router.post('/:taskId/delegate', async (req: express.Request, res: express.Respo
     console.error('Error delegating task:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
->>>>>>> origin/feat/workflow-engine-enhancements
 });
 
 
