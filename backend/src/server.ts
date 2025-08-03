@@ -36,6 +36,11 @@ import taskRoutes from './api/tasks/taskRoutes';
 import agentTemplateAdminRoutes from './api/admin/agentTemplateAdminRoutes';
 import workflowAdminRoutes from './api/admin/workflowAdminRoutes';
 
+// Core Banking Routes
+import accountRoutes from './api/corebanking/accountRoutes';
+import customerRoutes from './api/corebanking/customerRoutes';
+import complianceRoutes from './api/corebanking/complianceRoutes';
+
 
 // Mount auth routes
 app.use('/api/auth', authRoutes);
@@ -50,6 +55,11 @@ app.use('/api/tasks', taskRoutes);
 // Mount Admin Routes (ensure these are appropriately protected by middleware inside the route files)
 app.use('/api/admin/agent-templates', agentTemplateAdminRoutes);
 app.use('/api/admin/workflows', workflowAdminRoutes);
+
+// Mount Core Banking Routes
+app.use('/api/accounts', accountRoutes);
+app.use('/api/customers', customerRoutes);
+app.use('/api/compliance', complianceRoutes);
 
 
 // Seed initial data (for development convenience)
