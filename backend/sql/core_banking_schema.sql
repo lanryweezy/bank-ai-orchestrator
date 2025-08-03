@@ -721,6 +721,147 @@ CREATE TABLE system_parameters (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ============================================================================
+-- ENHANCED WORKFLOW SYSTEM INTEGRATION
+-- ============================================================================
+
+-- Add enhanced workflow tables for banking operations
+-- Note: These tables extend the basic workflow system for banking-specific use cases
+
+-- Enhanced Users Table for Banking (extends basic users table)
+CREATE TABLE IF NOT EXISTS users (
+    user_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    username VARCHAR(255) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(50) NOT NULL DEFAULT 'bank_user' CHECK (role IN ('platform_admin', 'bank_user', 'customer')),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Enhanced Workflows Table (extends basic workflows)
+CREATE TABLE IF NOT EXISTS workflows (
+    workflow_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    description TEXT,
+    definition_json JSONB NOT NULL,
+    status VARCHAR(50) DEFAULT 'draft' CHECK (status IN ('draft', 'active', 'deprecated')),
+    created_by UUID REFERENCES users(user_id),
+    is_active BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(name, version)
+);
+
+-- Enhanced Workflow Runs with full context support
+CREATE TABLE IF NOT EXISTS workflow_runs (
+    run_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    workflow_id UUID NOT NULL REFERENCES workflows(workflow_id),
+    triggering_user_id UUID REFERENCES users(user_id),
+    triggering_data_json JSONB,
+    status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'in_progress', 'completed', 'failed', 'cancelled')),
+    current_step_name VARCHAR(255),
+    context_json JSONB, -- Enhanced: stores complete workflow context, variables, and execution state
+    start_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    end_time TIMESTAMP WITH TIME ZONE,
+    results_json JSONB,
+    active_parallel_branches JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Enhanced Tasks Table
+CREATE TABLE IF NOT EXISTS tasks (
+    task_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    run_id UUID NOT NULL REFERENCES workflow_runs(run_id) ON DELETE CASCADE,
+    step_name VARCHAR(255) NOT NULL,
+    task_type VARCHAR(100) NOT NULL CHECK (task_type IN ('agent_execution', 'human_review', 'data_input', 'decision')),
+    assigned_role VARCHAR(100),
+    assigned_user_id UUID REFERENCES users(user_id),
+    input_data_json JSONB,
+    form_schema_json JSONB,
+    output_data_json JSONB,
+    status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'failed', 'cancelled')),
+    due_date TIMESTAMP WITH TIME ZONE,
+    completed_by_user_id UUID REFERENCES users(user_id),
+    completed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Agent Templates for Banking AI Agents
+CREATE TABLE IF NOT EXISTS agent_templates (
+    template_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    core_logic_identifier VARCHAR(255) NOT NULL,
+    configuration_schema_json JSONB NOT NULL,
+    input_schema_json JSONB,
+    output_schema_json JSONB,
+    is_active BOOLEAN DEFAULT true,
+    created_by UUID REFERENCES users(user_id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Configured Agent Instances
+CREATE TABLE IF NOT EXISTS configured_agents (
+    configured_agent_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    template_id UUID NOT NULL REFERENCES agent_templates(template_id),
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    configuration_json JSONB NOT NULL,
+    owner_user_id UUID NOT NULL REFERENCES users(user_id),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add triggers for timestamp updates
+CREATE TRIGGER update_users_updated_at
+    BEFORE UPDATE ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_workflows_updated_at
+    BEFORE UPDATE ON workflows
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_workflow_runs_updated_at
+    BEFORE UPDATE ON workflow_runs
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_tasks_updated_at
+    BEFORE UPDATE ON tasks
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_agent_templates_updated_at
+    BEFORE UPDATE ON agent_templates
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_configured_agents_updated_at
+    BEFORE UPDATE ON configured_agents
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_workflows_name_version ON workflows(name, version);
+CREATE INDEX IF NOT EXISTS idx_workflows_status ON workflows(status);
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow_id ON workflow_runs(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(status);
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_current_step ON workflow_runs(current_step_name);
+CREATE INDEX IF NOT EXISTS idx_tasks_run_id ON tasks(run_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_assigned_user ON tasks(assigned_user_id);
+CREATE INDEX IF NOT EXISTS idx_agent_templates_active ON agent_templates(is_active);
+CREATE INDEX IF NOT EXISTS idx_configured_agents_owner ON configured_agents(owner_user_id);
+
 -- Insert default system parameters
 INSERT INTO system_parameters (parameter_key, parameter_value, parameter_type, description) VALUES
 ('daily_transaction_limit', '1000000', 'number', 'Default daily transaction limit'),

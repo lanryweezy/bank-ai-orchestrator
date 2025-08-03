@@ -65,10 +65,13 @@ app.use('/api/compliance', complianceRoutes);
 // Seed initial data (for development convenience)
 import { seedInitialAgentTemplates } from './services/agentTemplateService';
 import { seedInitialWorkflowDefinitions } from './services/workflowService';
+import { seedBankingWorkflowTemplates } from './services/bankingWorkflowTemplates';
+import { query } from './config/db';
 
 const startServer = async () => {
   await seedInitialAgentTemplates();
   await seedInitialWorkflowDefinitions();
+  await seedBankingWorkflowTemplates(query);
 
   // testConnection().catch(err => console.error("DB connection test failed on startup:", err));
   // Start listening only after seeding (if any) is complete
