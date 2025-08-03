@@ -7,11 +7,13 @@ import {
     createTaskComment,
     getTaskComments,
     taskCommentSchema,
-    getTaskSummaryForUser
+    getTaskSummaryForUser,
+    delegateTask // Import delegateTask service function
 } from '../../services/taskService';
 import { processTaskCompletionAndContinueWorkflow } from '../../services/workflowRunService'; // Use this to handle completion
 import { authenticateToken, isBankUser, isPlatformAdmin }
     from '../../middleware/authMiddleware';
+import { z } from 'zod'; // Import Zod for request body validation
 
 const router = express.Router();
 
@@ -210,7 +212,6 @@ router.get('/:taskId/comments', async (req: express.Request, res: express.Respon
 
 // Other task actions like claim, assign, update_details could be added here.
 
-
 /**
  * @openapi
  * /tasks/summary:
@@ -270,6 +271,70 @@ router.get('/summary', async (req: express.Request, res: express.Response) => {
         console.error('Error fetching task summary:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
+=======
+/**
+ * @openapi
+ * /tasks/{taskId}/delegate:
+ *   post:
+ *     tags: [Tasks]
+ *     summary: Delegate a task to another user
+ *     description: Allows the currently assigned user to delegate the task.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/TaskIdPath'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/DelegateTaskBody'
+ *     responses:
+ *       '200':
+ *         description: Task delegated successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Task'
+ *       '400': { $ref: '#/components/responses/BadRequest' } # e.g. invalid targetUserId, self-delegation
+ *       '401': { $ref: '#/components/responses/Unauthorized' }
+ *       '403': { $ref: '#/components/responses/Forbidden' } # e.g. not current assignee
+ *       '404': { $ref: '#/components/responses/NotFound' } # Task not found
+ *       '500': { $ref: '#/components/responses/InternalServerError' }
+ */
+const delegateTaskBodySchema = z.object({
+  targetUserId: z.string().uuid("Invalid target user ID format."),
+});
+
+router.post('/:taskId/delegate', async (req: express.Request, res: express.Response) => {
+  try {
+    const { taskId } = req.params;
+    const delegatingUserId = req.user!.userId; // User performing the delegation
+
+    const { targetUserId } = delegateTaskBodySchema.parse(req.body);
+
+    if (delegatingUserId === targetUserId) {
+      return res.status(400).json({ message: "Cannot delegate task to yourself." });
+    }
+
+    // taskService.delegateTask will handle authorization (is delegatingUser the current assignee?)
+    const delegatedTask = await delegateTask(taskId, delegatingUserId, targetUserId);
+
+    res.status(200).json(delegatedTask);
+  } catch (error: any) {
+    if (error instanceof ZodError) {
+      return res.status(400).json({ message: 'Validation failed', errors: error.errors });
+    }
+    if (error.message.includes('not found') || error.message.includes('cannot be delegated')) {
+        return res.status(404).json({ message: error.message });
+    }
+    if (error.message.includes('not the current assignee')) {
+        return res.status(403).json({ message: error.message });
+    }
+    console.error('Error delegating task:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+>>>>>>> origin/feat/workflow-engine-enhancements
 });
 
 

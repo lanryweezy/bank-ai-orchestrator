@@ -35,6 +35,12 @@ import taskRoutes from './api/tasks/taskRoutes';
 // Admin Routes
 import agentTemplateAdminRoutes from './api/admin/agentTemplateAdminRoutes';
 import workflowAdminRoutes from './api/admin/workflowAdminRoutes';
+import triggerAdminRoutes from './api/admin/triggerAdminRoutes';
+import userAdminRoutes from './api/admin/userAdminRoutes';
+import workflowRunAdminRoutes from './api/admin/workflowRunAdminRoutes'; // Import workflow run admin routes
+
+// Webhook Public Routes
+import webhookRoutes from './api/webhookRoutes';
 
 
 // Mount auth routes
@@ -50,6 +56,12 @@ app.use('/api/tasks', taskRoutes);
 // Mount Admin Routes (ensure these are appropriately protected by middleware inside the route files)
 app.use('/api/admin/agent-templates', agentTemplateAdminRoutes);
 app.use('/api/admin/workflows', workflowAdminRoutes);
+app.use('/api/admin/triggers', triggerAdminRoutes);
+app.use('/api/admin/users', userAdminRoutes);
+app.use('/api/admin/workflow-runs', workflowRunAdminRoutes); // Mount workflow run admin routes
+
+// Mount Webhook Public Routes
+app.use('/webhooks', webhookRoutes); // Using /webhooks as base path, not /api/webhooks
 
 // Agent Monitoring Admin Route
 import agentMonitoringAdminRoutes from './api/admin/agentMonitoringAdminRoutes';
@@ -63,10 +75,12 @@ app.use('/api/notifications', notificationRoutes);
 // Seed initial data (for development convenience)
 import { seedInitialAgentTemplates } from './services/agentTemplateService';
 import { seedInitialWorkflowDefinitions } from './services/workflowService';
+import { initializeSchedulers as initializeWorkflowSchedulers } from './services/triggerService'; // Import scheduler initializer
 
 const startServer = async () => {
   await seedInitialAgentTemplates();
   await seedInitialWorkflowDefinitions();
+  await initializeWorkflowSchedulers(); // Initialize schedulers after seeding
 
   // testConnection().catch(err => console.error("DB connection test failed on startup:", err));
   // Start listening only after seeding (if any) is complete

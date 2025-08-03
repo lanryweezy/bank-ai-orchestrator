@@ -3,27 +3,36 @@ import { z } from 'zod';
 
 // Zod schema for Task creation (subset of fields, others are system-set)
 export const taskInputSchema = z.object({
-  // run_id, step_name_in_workflow, type are typically set by the workflow engine
   assigned_to_agent_id: z.string().uuid().optional().nullable(),
   assigned_to_user_id: z.string().uuid().optional().nullable(),
-  status: z.enum(['pending', 'assigned', 'in_progress', 'completed', 'failed', 'skipped', 'requires_escalation']).optional().default('pending'),
+  assigned_to_role: z.string().optional().nullable(), // Added
+  status: z.enum(['pending', 'assigned', 'in_progress', 'completed', 'failed', 'skipped', 'requires_escalation']).optional(), // Default removed for updates
   input_data_json: z.record(z.any()).optional(),
   output_data_json: z.record(z.any()).optional(),
   due_date: z.string().datetime({ offset: true }).optional().nullable(), // ISO 8601 format
+  // Fields from DB that might be updated or part of Task object:
+  deadline_at: z.string().datetime({ offset: true }).optional().nullable(),
+  escalation_policy_json: z.record(z.any()).optional().nullable(), // Using record(z.any()) for now for JSONB
+  is_delegated: z.boolean().optional(),
+  delegated_by_user_id: z.string().uuid().optional().nullable(),
+  retry_count: z.number().int().optional(),
 });
 export type TaskInput = z.infer<typeof taskInputSchema>;
+
+import { HumanTaskEscalationPolicy } from './workflowService'; // Import for escalation policy type
 
 // For internal creation by workflow engine
 export interface TaskCreationData {
   run_id: string;
   step_name_in_workflow: string;
-  type: 'agent_execution' | 'human_review' | 'data_input' | 'decision' | 'sub_workflow'; // Added sub_workflow
+  type: 'agent_execution' | 'human_review' | 'data_input' | 'decision' | 'sub_workflow';
   assigned_to_agent_id?: string | null;
   assigned_to_user_id?: string | null;
   assigned_to_role?: string | null;
   input_data_json?: Record<string, any> | null;
-  due_date?: string | null;
-  // sub_workflow_run_id is set after creation via an update if type is 'sub_workflow'
+  due_date?: string | null; // This was the original generic due_date, can be used or superseded by deadline_minutes
+  deadline_minutes?: number | null; // For calculating deadline_at
+  escalation_policy?: HumanTaskEscalationPolicy | null; // From workflow definition
 }
 
 export const createTask = async (data: TaskCreationData) => {
@@ -33,10 +42,23 @@ export const createTask = async (data: TaskCreationData) => {
     type,
     assigned_to_agent_id,
     assigned_to_user_id,
-    assigned_to_role, // Added
+    assigned_to_role,
     input_data_json,
-    due_date
+    // due_date, // Original due_date field, can be kept or removed if deadline_minutes replaces its use case
+    deadline_minutes,
+    escalation_policy,
   } = data;
+
+  let deadlineAt: string | null = null;
+  if (deadline_minutes && deadline_minutes > 0 && (data.type === 'human_review' || data.type === 'data_input' || data.type === 'decision')) {
+    deadlineAt = new Date(Date.now() + deadline_minutes * 60000).toISOString();
+  } else if (data.due_date) { // Fallback to use due_date if provided and deadline_minutes isn't
+    deadlineAt = data.due_date;
+  }
+
+  const escalationPolicyJson = escalation_policy && (data.type === 'human_review' || data.type === 'data_input' || data.type === 'decision')
+    ? escalation_policy
+    : null;
 
   // Validation for assignment based on type
   if (type === 'agent_execution' && !assigned_to_agent_id) {
@@ -56,18 +78,23 @@ export const createTask = async (data: TaskCreationData) => {
   const initialStatus = (assigned_to_agent_id || assigned_to_user_id || assigned_to_role) ? 'assigned' : 'pending';
 
   const result = await query(
-    `INSERT INTO tasks (run_id, step_name_in_workflow, type, assigned_to_agent_id, assigned_to_user_id, assigned_to_role, input_data_json, due_date, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+    `INSERT INTO tasks (
+        run_id, step_name_in_workflow, type,
+        assigned_to_agent_id, assigned_to_user_id, assigned_to_role,
+        input_data_json, status,
+        deadline_at, escalation_policy_json
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
     [
       run_id,
       step_name_in_workflow,
       type,
       assigned_to_agent_id,
       assigned_to_user_id,
-      assigned_to_role, // Added
+      assigned_to_role,
       input_data_json || {},
-      due_date,
-      initialStatus
+      initialStatus,
+      deadlineAt, // Use calculated deadlineAt
+      escalationPolicyJson // Use prepared escalationPolicyJson
     ]
   );
   const newTask = result.rows[0];
@@ -154,6 +181,112 @@ export const getTasksForAgent = async (agentId: string, status?: string) => {
 export const getTasksForRun = async (runId: string) => {
     const result = await query('SELECT * FROM tasks WHERE run_id = $1 ORDER BY created_at ASC', [runId]);
     return result.rows;
+};
+
+// Simplified Escalation Check (not called automatically by a scheduler in this iteration)
+export const checkAndProcessTaskEscalation = async (taskId: string) => {
+    const task = await getTaskById(taskId);
+    if (!task || task.type === 'agent_execution' || task.type === 'sub_workflow') {
+        // console.log(`Task ${taskId} not found or not a human task, skipping escalation check.`);
+        return null;
+    }
+
+    if (['completed', 'failed', 'skipped', 'requires_escalation'].includes(task.status)) {
+        // console.log(`Task ${taskId} is in a terminal or already escalated status (${task.status}), skipping escalation check.`);
+        return null;
+    }
+
+    if (task.deadline_at && task.escalation_policy_json) {
+        const deadline = new Date(task.deadline_at);
+        if (new Date() > deadline) {
+            console.log(`Task ${taskId} is overdue. Processing escalation policy.`);
+            const policy = task.escalation_policy_json as HumanTaskEscalationPolicy; // Cast from JSONB
+            let updatePayload: Partial<TaskInput> = { status: 'requires_escalation' }; // Default escalation status
+
+            switch (policy.action) {
+                case 'reassign_to_role':
+                    if (policy.target_role) {
+                        console.log(`Task ${taskId} escalated: Reassigning to role ${policy.target_role}.`);
+                        updatePayload.assigned_to_role = policy.target_role;
+                        updatePayload.assigned_to_user_id = null; // Clear direct user assignment
+                        updatePayload.is_delegated = false; // Clear delegation fields
+                        updatePayload.delegated_by_user_id = null;
+                    } else {
+                        console.warn(`Task ${taskId} escalation: 'reassign_to_role' action missing target_role.`);
+                    }
+                    break;
+                case 'notify_manager_role':
+                    if (policy.target_role) {
+                        console.log(`Task ${taskId} escalated: Emitting notification for manager role ${policy.target_role}. (Notification not implemented)`);
+                        // Actual notification logic would go here or be triggered by an event.
+                    } else {
+                        console.warn(`Task ${taskId} escalation: 'notify_manager_role' action missing target_role.`);
+                    }
+                    break;
+                case 'custom_event':
+                    if (policy.custom_event_name) {
+                        console.log(`Task ${taskId} escalated: Emitting custom event '${policy.custom_event_name}'. (Event emission not implemented)`);
+                        // Actual event emission logic here.
+                    } else {
+                        console.warn(`Task ${taskId} escalation: 'custom_event' action missing custom_event_name.`);
+                    }
+                    break;
+                default:
+                    console.warn(`Task ${taskId} escalation: Unknown action '${(policy as any).action}'.`);
+            }
+
+            // To prevent re-escalating immediately on next check if status alone doesn't stop it:
+            // Option 1: Clear deadline_at or escalation_policy_json (but this loses info)
+            // Option 2: Add an 'escalated_at' timestamp and check against it.
+            // Option 3: Rely on status 'requires_escalation' to be handled by an admin/manager.
+            // For now, setting status to 'requires_escalation' is the primary mechanism.
+            // updatePayload.escalation_processed_at = new Date().toISOString(); // Example if adding such a field
+
+            return updateTask(taskId, updatePayload);
+        } else {
+            // console.log(`Task ${taskId} is not yet overdue. Deadline: ${task.deadline_at}`);
+        }
+    }
+    return null; // No escalation occurred
+};
+
+export const delegateTask = async (taskId: string, delegatingUserId: string, targetUserId: string) => {
+  const task = await getTaskById(taskId);
+  if (!task) {
+    throw new Error(`Task ${taskId} not found.`);
+  }
+  if (task.type === 'agent_execution' || task.type === 'sub_workflow') {
+    throw new Error(`Task ${taskId} is of type ${task.type} and cannot be delegated by a user.`);
+  }
+  if (task.assigned_to_user_id !== delegatingUserId) {
+    throw new Error(`User ${delegatingUserId} is not the current assignee of task ${taskId} and cannot delegate it.`);
+  }
+  if (delegatingUserId === targetUserId) {
+    throw new Error('Cannot delegate task to the same user.');
+  }
+
+  // TODO: Check if targetUserId is a valid user in the system (optional, depends on how strict)
+
+  const updatedFields: Partial<TaskInput> = { // Explicitly type to help inference
+    assigned_to_user_id: targetUserId,
+    delegated_by_user_id: delegatingUserId,
+    is_delegated: true,
+    status: 'assigned' as const, // Reset status for the new assignee, use 'as const'
+    assigned_to_role: null, // Clear role assignment if any when delegating to a specific user
+  };
+
+  // Add a comment about the delegation
+  try {
+    const delegatingUser = await query('SELECT username FROM users WHERE user_id = $1', [delegatingUserId]);
+    const targetUser = await query('SELECT username FROM users WHERE user_id = $1', [targetUserId]);
+    const commentText = `Task delegated from ${delegatingUser.rows[0]?.username || 'Previous User'} to ${targetUser.rows[0]?.username || 'New User'}.`;
+    await createTaskComment(taskId, delegatingUserId, commentText); // System comment or delegating user's comment
+  } catch (commentError) {
+    console.error("Failed to create delegation comment:", commentError);
+    // Proceed with delegation even if comment fails
+  }
+
+  return updateTask(taskId, updatedFields);
 };
 
 export const updateTask = async (taskId: string, data: Partial<TaskInput>) => {

@@ -177,10 +177,16 @@ const TaskManager: React.FC = () => {
                       Type: {task.type}
                       {task.assigned_to_agent_id && ` (Agent: ${task.assigned_to_agent_id.substring(0,8)}...)`}
                     </p>
-                    {task.due_date && (
-                        <p className={`text-xs mt-1 ${new Date(task.due_date) < new Date() && task.status !== 'completed' ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
-                            Due: {format(new Date(task.due_date), "PPpp")}
-                            {new Date(task.due_date) < new Date() && task.status !== 'completed' && <span className="ml-1">(Overdue)</span>}
+                    {task.deadline_at && (
+                        <p className={`text-xs mt-1 ${new Date(task.deadline_at) < new Date() && task.status !== 'completed' ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                            Deadline: {format(new Date(task.deadline_at), "PPpp")}
+                            {new Date(task.deadline_at) < new Date() && task.status !== 'completed' && <span className="ml-1">(Overdue)</span>}
+                        </p>
+                    )}
+                     {/* Delegation Info Display */}
+                    {task.is_delegated && task.delegated_by_user_id && ( // Assuming we'd want to show who delegated it
+                        <p className="text-xs mt-1 text-purple-600">
+                            Delegated (from user: {task.delegated_by_user_id.substring(0,8)}...)
                         </p>
                     )}
                   </div>

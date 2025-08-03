@@ -26,11 +26,17 @@ describe('taskService', () => {
     type: 'human_review',
     assigned_to_user_id: userId,
     input_data_json: { loanAmount: 10000 },
-    status: 'assigned' // Default status from createTask logic
+    status: 'assigned'
   };
-   const fullTaskData = { // What DB might return
+   const fullTaskData = {
     task_id: 'task-uuid-1',
     ...taskData,
+    deadline_at: null,
+    escalation_policy_json: null,
+    is_delegated: false,
+    delegated_by_user_id: null,
+    retry_count: 0,
+    sub_workflow_run_id: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -44,21 +50,47 @@ describe('taskService', () => {
     it('should create and return a task for human review', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [fullTaskData] });
       const result = await createTask(taskData);
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO tasks (run_id, step_name_in_workflow, type, assigned_to_agent_id, assigned_to_user_id, assigned_to_role, input_data_json, due_date, status)'),
-        [runId, taskData.step_name_in_workflow, taskData.type, undefined, userId, undefined, taskData.input_data_json || {}, undefined, 'assigned']
-      );
+      const localExpectedHumanReviewQueryString = `INSERT INTO tasks (
+        run_id, step_name_in_workflow, type,
+        assigned_to_agent_id, assigned_to_user_id, assigned_to_role,
+        input_data_json, status,
+        deadline_at, escalation_policy_json
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`;
+
+      expect(mockQuery).toHaveBeenCalledTimes(1);
+      const actualQuery = mockQuery.mock.calls[0][0].replace(/\s+/g, ' ').trim();
+      const expectedNormalizedQuery = localExpectedHumanReviewQueryString.replace(/\s+/g, ' ').trim();
+      expect(actualQuery).toBe(expectedNormalizedQuery);
+      expect(mockQuery.mock.calls[0][1]).toEqual([
+        runId, taskData.step_name_in_workflow, taskData.type,
+        undefined, userId, undefined,
+        taskData.input_data_json || {}, 'assigned',
+        null, null
+      ]);
       expect(result).toEqual(fullTaskData);
     });
     it('should create a task for agent execution', async () => {
         const agentTaskData: TaskCreationData = { ...taskData, type: 'agent_execution', assigned_to_agent_id: agentId, assigned_to_user_id: undefined, assigned_to_role: undefined };
-        const fullAgentTaskData = { ...fullTaskData, ...agentTaskData };
+        const fullAgentTaskData = { ...fullTaskData, ...agentTaskData, assigned_to_user_id: null };
         mockQuery.mockResolvedValueOnce({ rows: [fullAgentTaskData] });
         await createTask(agentTaskData);
-        expect(mockQuery).toHaveBeenCalledWith(
-            expect.stringContaining('INSERT INTO tasks (run_id, step_name_in_workflow, type, assigned_to_agent_id, assigned_to_user_id, assigned_to_role, input_data_json, due_date, status)'),
-            [runId, agentTaskData.step_name_in_workflow, agentTaskData.type, agentId, undefined, undefined, agentTaskData.input_data_json || {}, undefined, 'assigned']
-        );
+        const expectedAgentExecutionQueryString = `INSERT INTO tasks (
+        run_id, step_name_in_workflow, type,
+        assigned_to_agent_id, assigned_to_user_id, assigned_to_role,
+        input_data_json, status,
+        deadline_at, escalation_policy_json
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`;
+
+        expect(mockQuery).toHaveBeenCalledTimes(1);
+        const actualQuery = mockQuery.mock.calls[0][0].replace(/\s+/g, ' ').trim();
+        const expectedNormalizedQuery = expectedAgentExecutionQueryString.replace(/\s+/g, ' ').trim();
+        expect(actualQuery).toBe(expectedNormalizedQuery);
+        expect(mockQuery.mock.calls[0][1]).toEqual([
+            runId, agentTaskData.step_name_in_workflow, agentTaskData.type,
+            agentId, undefined, undefined,
+            agentTaskData.input_data_json || {}, 'assigned',
+            null, null
+        ]);
     });
     it('should throw error if agent task is missing assigned_to_agent_id', async () => {
         const invalidAgentTaskData: TaskCreationData = { ...taskData, type: 'agent_execution', assigned_to_agent_id: undefined, assigned_to_user_id: undefined };
@@ -133,13 +165,9 @@ describe('taskService', () => {
   describe('completeTask', () => {
     it('should mark task as completed and set output data', async () => {
       const outputData = { reviewOutcome: 'approved' };
-      // Mock for getTaskById
       mockQuery.mockResolvedValueOnce({ rows: [{ ...fullTaskData, status: 'assigned' }] });
-      // Mock for updateTask
       mockQuery.mockResolvedValueOnce({ rows: [{ ...fullTaskData, status: 'completed', output_data_json: outputData }] });
-
       const result = await completeTask('task-uuid-1', outputData, userId);
-
       expect(mockQuery).toHaveBeenCalledWith('SELECT * FROM tasks WHERE task_id = $1', ['task-uuid-1']);
       expect(mockQuery).toHaveBeenCalledWith(
         'UPDATE tasks SET "status" = $2, "output_data_json" = $3 WHERE task_id = $1 RETURNING *',
@@ -150,14 +178,18 @@ describe('taskService', () => {
     });
 
     it('should throw error if task not found', async () => {
-      mockQuery.mockResolvedValueOnce({ rows: [] }); // getTaskById returns null
-      await expect(completeTask('task-uuid-1', {}, userId)).rejects.toThrow('Task not found.');
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      await expect(completeTask('task-not-found-id', {}, userId)).rejects.toThrow('Task task-not-found-id not found.');
     });
-    it('should throw error if task already completed', async () => {
-      mockQuery.mockResolvedValueOnce({ rows: [{ ...fullTaskData, status: 'completed' }] });
-      await expect(completeTask('task-uuid-1', {}, userId)).rejects.toThrow('Task is already completed.');
+    it('should warn and return task if already completed', async () => {
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const alreadyCompletedTask = { ...fullTaskData, status: 'completed' as const };
+      mockQuery.mockResolvedValueOnce({ rows: [alreadyCompletedTask] });
+      const result = await completeTask(alreadyCompletedTask.task_id, {}, userId);
+      expect(result).toEqual(alreadyCompletedTask);
+      expect(consoleWarnSpy).toHaveBeenCalledWith(`Task ${alreadyCompletedTask.task_id} is already completed. Returning current state.`);
+      consoleWarnSpy.mockRestore();
     });
-    // Test for user authorization in completeTask is more of an integration/API test with req.user
   });
 
   describe('taskInputSchema Zod validation', () => {
@@ -166,5 +198,4 @@ describe('taskService', () => {
         expect(() => taskInputSchema.partial().parse(validData)).not.toThrow();
     });
   });
-
 });
