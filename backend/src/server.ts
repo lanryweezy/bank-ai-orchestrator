@@ -11,7 +11,18 @@ const PORT = serverConfig.port;
 
 // Middleware
 app.use(helmet()); // Basic security headers
-app.use(cors()); // Enable CORS for all routes
+
+// CORS configuration for production
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production' 
+    ? [process.env.FRONTEND_URL, 'https://*.vercel.app']
+    : ['http://localhost:8080', 'http://localhost:3000'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+app.use(cors(corsOptions)); // Enable CORS with configuration
 app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
@@ -19,9 +30,26 @@ app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 // Make sure swaggerConfig includes schemas for AgentTemplateInput, ErrorResponse, AgentTemplate
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// Simple route for testing
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'Backend is healthy', timestamp: new Date().toISOString() });
+// Health check route with database connection test
+app.get('/api/health', async (req, res) => {
+  try {
+    // Test database connection
+    await query('SELECT NOW()');
+    
+    res.json({ 
+      status: 'Backend is healthy',
+      database: 'Railway PostgreSQL connected',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      status: 'Backend unhealthy',
+      database: 'Railway PostgreSQL connection failed', 
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Import Routes
@@ -35,12 +63,11 @@ import taskRoutes from './api/tasks/taskRoutes';
 // Admin Routes
 import agentTemplateAdminRoutes from './api/admin/agentTemplateAdminRoutes';
 import workflowAdminRoutes from './api/admin/workflowAdminRoutes';
-import triggerAdminRoutes from './api/admin/triggerAdminRoutes';
-import userAdminRoutes from './api/admin/userAdminRoutes';
-import workflowRunAdminRoutes from './api/admin/workflowRunAdminRoutes'; // Import workflow run admin routes
 
-// Webhook Public Routes
-import webhookRoutes from './api/webhookRoutes';
+// Core Banking Routes
+import accountRoutes from './api/corebanking/accountRoutes';
+import customerRoutes from './api/corebanking/customerRoutes';
+import complianceRoutes from './api/corebanking/complianceRoutes';
 
 
 // Mount auth routes
@@ -56,42 +83,61 @@ app.use('/api/tasks', taskRoutes);
 // Mount Admin Routes (ensure these are appropriately protected by middleware inside the route files)
 app.use('/api/admin/agent-templates', agentTemplateAdminRoutes);
 app.use('/api/admin/workflows', workflowAdminRoutes);
-app.use('/api/admin/triggers', triggerAdminRoutes);
-app.use('/api/admin/users', userAdminRoutes);
-app.use('/api/admin/workflow-runs', workflowRunAdminRoutes); // Mount workflow run admin routes
 
-// Mount Webhook Public Routes
-app.use('/webhooks', webhookRoutes); // Using /webhooks as base path, not /api/webhooks
-
-// Agent Monitoring Admin Route
-import agentMonitoringAdminRoutes from './api/admin/agentMonitoringAdminRoutes';
-app.use('/api/admin/agents', agentMonitoringAdminRoutes); // Base path for agent admin things
-
-// Mount Notification Routes
-import notificationRoutes from './api/notifications/notificationRoutes';
-app.use('/api/notifications', notificationRoutes);
+// Mount Core Banking Routes
+app.use('/api/accounts', accountRoutes);
+app.use('/api/customers', customerRoutes);
+app.use('/api/compliance', complianceRoutes);
 
 
 // Seed initial data (for development convenience)
 import { seedInitialAgentTemplates } from './services/agentTemplateService';
 import { seedInitialWorkflowDefinitions } from './services/workflowService';
-import { initializeSchedulers as initializeWorkflowSchedulers } from './services/triggerService'; // Import scheduler initializer
+import { seedBankingWorkflowTemplates } from './services/bankingWorkflowTemplates';
+import { query } from './config/db';
+import { testRailwayConnection, initializeRailwayDatabase } from './utils/testDatabase';
 
 const startServer = async () => {
-  await seedInitialAgentTemplates();
-  await seedInitialWorkflowDefinitions();
-  await initializeWorkflowSchedulers(); // Initialize schedulers after seeding
+  try {
+    console.log('🚀 Starting banking application server...');
+    
+    // Only seed data in development or when explicitly requested
+    if (process.env.NODE_ENV !== 'production' || process.env.SEED_DATA === 'true') {
+      console.log('🌱 Seeding initial data...');
+      await seedInitialAgentTemplates();
+      await seedInitialWorkflowDefinitions();
+      await seedBankingWorkflowTemplates(query);
+      console.log('✅ Data seeding completed');
+    }
 
-  // testConnection().catch(err => console.error("DB connection test failed on startup:", err));
-  // Start listening only after seeding (if any) is complete
-  app.listen(PORT, () => {
-    console.log(`Backend server is running on http://localhost:${PORT}`);
-  });
+    // Test Railway database connection
+    const dbTest = await testRailwayConnection();
+    if (!dbTest.success) {
+      console.error('❌ Railway database connection failed. Please check your DATABASE_URL.');
+      if (process.env.NODE_ENV !== 'production') {
+        return;
+      }
+    }
+    
+    // Initialize database schema if needed
+    await initializeRailwayDatabase();
+
+    // Start server only if not running in Vercel (serverless)
+    if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+      app.listen(PORT, () => {
+        console.log(`🏦 Banking server running on http://localhost:${PORT}`);
+        console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
+      });
+    }
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      process.exit(1);
+    }
+  }
 };
 
-startServer().catch(error => {
-  console.error("Failed to start the server:", error);
-  process.exit(1);
-});
+// Initialize server
+startServer();
 
 export default app; // For potential testing or programmatic use

@@ -1,19 +1,17 @@
 import * as express from 'express';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 import {
-    workflowDefinitionSchema, // Keep one
-    workflowDefinitionJsonSchema, // Import for new version payload validation
+    workflowDefinitionSchema,
     createWorkflowDefinition,
     updateWorkflowDefinition,
     DANGEROUS_deleteWorkflowDefinition,
-    createNewWorkflowVersionFromLatest,
-    getAllWorkflowVersionsByName, // Corrected import name
-    getWorkflowDefinitionById,
     getAllWorkflowDefinitions,
-    activateWorkflowVersion
+    getWorkflowDefinitionById,
+    createNewWorkflowVersionFromLatest as createNewWorkflowVersion,
+    getAllWorkflowVersionsByName as getAllWorkflowDefinitionsByName,
+    activateWorkflowVersion,
 } from '../../services/workflowService';
 import { authenticateToken, isPlatformAdmin } from '../../middleware/authMiddleware';
-import { z } from 'zod'; // Import Zod
 
 const router = express.Router();
 
@@ -61,14 +59,15 @@ router.post('/', async (req: express.Request, res: express.Response) => {
   try {
     // Ensure version is provided or default it in schema if that's the desired behavior for creation.
     // This route is for creating the FIRST version of a workflow.
-    const creationSchema = workflowDefinitionSchema.omit({ version: true });
-    // is_active has a default in workflowDefinitionSchema, so client can override or let default.
-    // name and definition_json are required by workflowDefinitionSchema.
-    const parsedData = creationSchema.parse(req.body);
+    // Version is handled by the service (defaults to 1 and checks for conflicts).
+    const data = workflowDefinitionSchema.omit({ version: true }).extend({
+        name: z.string().min(3, "Workflow name must be at least 3 characters"),
+        // version can be omitted, service defaults to 1 for new names
+    }).parse(req.body);
 
     const workflow = await createWorkflowDefinition({
-      ...parsedData, // Contains name, description (opt), definition_json, is_active (opt)
-      version: 1,     // Explicitly set version 1 for this route
+      ...data,
+      version: 1, // Explicitly set to 1 for clarity for this route's purpose
     });
     res.status(201).json(workflow);
   } catch (error: any) {
@@ -345,19 +344,16 @@ router.delete('/:workflowId', async (req: express.Request, res: express.Response
 router.post('/name/:name/versions', async (req: express.Request, res: express.Response) => {
     try {
         const workflowName = req.params.name;
-        // For creating a new version, definition_json is required.
-        // Description and is_active are optional (service/schema defaults apply for is_active).
-        const newVersionDataSchema = z.object({
-            description: z.string().optional().nullable(),
-            definition_json: workflowDefinitionJsonSchema, // Copied from workflowService for direct use
-            is_active: z.boolean().optional(), // Service defaults to true if not provided
-        });
-        const parsedData = newVersionDataSchema.parse(req.body);
+        // Validate only specific fields for new version creation, name & version are handled by service
+        const data = workflowDefinitionSchema.pick({
+            description: true,
+            definition_json: true,
+            is_active: true, // is_active for the new version, service handles deactivating others
+        }).partial().parse(req.body);
 
-        const newVersion = await createNewWorkflowVersionFromLatest(workflowName, {
-            description: parsedData.description ?? undefined, // Ensure undefined not null if that's what service expects
-            definition_json: parsedData.definition_json,
-            is_active: parsedData.is_active,
+        const newVersion = await createNewWorkflowVersion(workflowName, {
+            ...data,
+            definition_json: data.definition_json || {}
         });
         res.status(201).json(newVersion);
     } catch (error: any) {
@@ -406,7 +402,7 @@ router.post('/name/:name/versions', async (req: express.Request, res: express.Re
 router.get('/name/:name/versions', async (req: express.Request, res: express.Response) => {
     try {
         const workflowName = req.params.name;
-        const versions = await getAllWorkflowVersionsByName(workflowName); // Corrected function name
+        const versions = await getAllWorkflowDefinitionsByName(workflowName);
         if (versions.length === 0) {
             // Distinguish between "no workflow with this name" vs "workflow exists but has no versions" (should not happen with current logic)
             // For simplicity, if service returns empty, assume name not found or no versions.

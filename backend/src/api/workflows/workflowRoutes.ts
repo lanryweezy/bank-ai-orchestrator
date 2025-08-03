@@ -53,7 +53,7 @@ router.post('/:workflowId/start', isBankUser, async (req: express.Request, res: 
         return res.status(404).json({ message: 'Active workflow definition not found.' });
     }
 
-    const workflowRun = await createWorkflowRun(workflowId, userId, validatedData.triggering_data_json);
+    const workflowRun = await createWorkflowRun(workflowId, userId, validatedData.inputData);
     res.status(201).json(workflowRun);
   } catch (error: any) {
     if (error instanceof ZodError) {
@@ -69,7 +69,8 @@ router.post('/:workflowId/start', isBankUser, async (req: express.Request, res: 
 router.post('/start-by-name', isBankUser, async (req: express.Request, res: express.Response) => {
     try {
         const validatedData = startWorkflowRunSchema.parse(req.body);
-        const { workflow_name, workflow_version } = validatedData;
+        const workflow_name = req.body.workflow_name;
+        const workflow_version = req.body.workflow_version;
         const userId = req.user!.userId;
 
         if (!workflow_name) {
@@ -84,7 +85,7 @@ router.post('/start-by-name', isBankUser, async (req: express.Request, res: expr
             });
         }
 
-        const workflowRun = await createWorkflowRun(workflowDefinition.workflow_id, userId, validatedData.triggering_data_json);
+        const workflowRun = await createWorkflowRun(workflowDefinition.workflow_id, userId, validatedData.inputData);
         res.status(201).json(workflowRun);
 
     } catch (error: any) {

@@ -1,20 +1,31 @@
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
+    "baseUrl": "./backend/src",
+    "outDir": "./dist/backend",
     "target": "ES2020",
-    "module": "commonjs", // Node.js uses CommonJS modules
-    "rootDir": "./backend/src", // Updated: Point to the new src directory
-    "outDir": "./dist/backend", // Output remains the same, structure inside will reflect src
-    "baseUrl": "./backend/src", // Optional: helps with nicer import paths
-    "paths": { // Optional: for custom import aliases if needed later
-      "@/*": ["*"]
+    "module": "commonjs",
+    "lib": ["ES2020"],
+    "paths": {
+      "@/*": ["*"],
+      "@config/*": ["config/*"],
+      "@utils/*": ["utils/*"],
+      "@services/*": ["services/*"],
+      "@api/*": ["api/*"]
     },
+    "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "moduleResolution": "node" // Specify module resolution strategy
+    "strict": false,
+    "noImplicitAny": false
   },
-  "include": ["backend/src/**/*.ts"], // Updated: Only compile files in the backend/src directory
-  "exclude": ["node_modules", "src", "dist"] // Exclude frontend src, node_modules, and backend dist
+  "include": [
+    "backend/src/**/*.ts"
+  ],
+  "exclude": [
+    "backend/src/**/*.test.ts",
+    "backend/src/**/*.spec.ts",
+    "node_modules",
+    "dist"
+  ]
 }

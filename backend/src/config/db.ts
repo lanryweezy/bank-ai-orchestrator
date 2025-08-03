@@ -4,12 +4,15 @@ import { dbConfig } from './index';
 const pool = new Pool(dbConfig);
 
 pool.on('connect', () => {
-  console.log('Connected to the PostgreSQL database.');
+  console.log('✅ Connected to Railway PostgreSQL database');
 });
 
 pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
+  console.error('❌ PostgreSQL connection error:', err);
+  // Don't exit in production to allow Vercel functions to recover
+  if (process.env.NODE_ENV !== 'production') {
+    process.exit(-1);
+  }
 });
 
 export const query = async (text: string, params?: any[]) => {
