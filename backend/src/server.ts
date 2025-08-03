@@ -30,9 +30,26 @@ app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 // Make sure swaggerConfig includes schemas for AgentTemplateInput, ErrorResponse, AgentTemplate
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// Simple route for testing
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'Backend is healthy', timestamp: new Date().toISOString() });
+// Health check route with database connection test
+app.get('/api/health', async (req, res) => {
+  try {
+    // Test database connection
+    await query('SELECT NOW()');
+    
+    res.json({ 
+      status: 'Backend is healthy',
+      database: 'Railway PostgreSQL connected',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      status: 'Backend unhealthy',
+      database: 'Railway PostgreSQL connection failed', 
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Import Routes
@@ -78,6 +95,7 @@ import { seedInitialAgentTemplates } from './services/agentTemplateService';
 import { seedInitialWorkflowDefinitions } from './services/workflowService';
 import { seedBankingWorkflowTemplates } from './services/bankingWorkflowTemplates';
 import { query } from './config/db';
+import { testRailwayConnection, initializeRailwayDatabase } from './utils/testDatabase';
 
 const startServer = async () => {
   try {
@@ -92,13 +110,17 @@ const startServer = async () => {
       console.log('✅ Data seeding completed');
     }
 
-    // Test database connection
-    try {
-      await query('SELECT NOW()');
-      console.log('✅ Database connection successful');
-    } catch (dbError) {
-      console.error('❌ Database connection failed:', dbError);
+    // Test Railway database connection
+    const dbTest = await testRailwayConnection();
+    if (!dbTest.success) {
+      console.error('❌ Railway database connection failed. Please check your DATABASE_URL.');
+      if (process.env.NODE_ENV !== 'production') {
+        return;
+      }
     }
+    
+    // Initialize database schema if needed
+    await initializeRailwayDatabase();
 
     // Start server only if not running in Vercel (serverless)
     if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
