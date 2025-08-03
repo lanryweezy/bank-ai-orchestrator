@@ -63,10 +63,12 @@ router.post('/:taskId/complete', async (req: express.Request, res: express.Respo
     const taskId = req.params.taskId;
     const userId = req.user!.userId;
 
-    const updatedTask = await processTaskCompletionAndContinueWorkflow(taskId, output_data_json || {}, userId);
-
-    if (!updatedTask) { // Should not happen if no error thrown by service
-        return res.status(404).json({ message: 'Task not found or completion failed.' });
+    await processTaskCompletionAndContinueWorkflow(taskId, output_data_json || {}, userId);
+    
+    // Get the updated task after completion
+    const updatedTask = await getTaskById(taskId);
+    if (!updatedTask) {
+        return res.status(404).json({ message: 'Task not found after completion.' });
     }
     res.status(200).json(updatedTask);
   } catch (error: any) {

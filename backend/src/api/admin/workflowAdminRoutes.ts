@@ -1,10 +1,15 @@
 import * as express from 'express';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 import {
     workflowDefinitionSchema,
     createWorkflowDefinition,
     updateWorkflowDefinition,
     DANGEROUS_deleteWorkflowDefinition,
+    getAllWorkflowDefinitions,
+    getWorkflowDefinitionById,
+    createNewWorkflowVersionFromLatest as createNewWorkflowVersion,
+    getAllWorkflowVersionsByName as getAllWorkflowDefinitionsByName,
+    activateWorkflowVersion,
 } from '../../services/workflowService';
 import { authenticateToken, isPlatformAdmin } from '../../middleware/authMiddleware';
 
@@ -346,7 +351,10 @@ router.post('/name/:name/versions', async (req: express.Request, res: express.Re
             is_active: true, // is_active for the new version, service handles deactivating others
         }).partial().parse(req.body);
 
-        const newVersion = await createNewWorkflowVersion(workflowName, data);
+        const newVersion = await createNewWorkflowVersion(workflowName, {
+            ...data,
+            definition_json: data.definition_json || {}
+        });
         res.status(201).json(newVersion);
     } catch (error: any) {
         if (error instanceof ZodError) {
