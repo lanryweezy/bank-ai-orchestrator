@@ -227,6 +227,64 @@ const options: swaggerJsdoc.Options = {
                     }
                 }
             }
+        },
+        Notification: {
+            type: 'object',
+            properties: {
+                notification_id: { type: 'string', format: 'uuid', readOnly: true },
+                user_id: { type: 'string', format: 'uuid', readOnly: true },
+                type: { type: 'string', example: 'task_assigned' },
+                message: { type: 'string', example: 'You have been assigned a new task.' },
+                related_entity_type: { type: 'string', nullable: true, example: 'task' },
+                related_entity_id: { type: 'string', format: 'uuid', nullable: true },
+                is_read: { type: 'boolean', readOnly: true },
+                created_at: { type: 'string', format: 'date-time', readOnly: true },
+                read_at: { type: 'string', format: 'date-time', nullable: true, readOnly: true },
+            }
+        },
+        // Add TaskCommentInput and TaskComment schemas if not already present from previous features
+        AgentStatusCounts: {
+            type: 'object',
+            properties: {
+                active: { type: 'integer', example: 10 },
+                inactive: { type: 'integer', example: 2 },
+                error: { type: 'integer', example: 1 },
+                total: { type: 'integer', example: 13 },
+            }
+        },
+        RecentlyActiveAgentItem: {
+            type: 'object',
+            properties: {
+                agent_id: { type: 'string', format: 'uuid' },
+                bank_specific_name: { type: 'string' },
+                template_name: { type: 'string' },
+                status: { type: 'string' },
+                last_task_activity: { type: 'string', format: 'date-time' }
+            }
+        },
+        ErrorStateAgentItem: {
+            type: 'object',
+            properties: {
+                agent_id: { type: 'string', format: 'uuid' },
+                bank_specific_name: { type: 'string' },
+                template_name: { type: 'string' },
+                status: { type: 'string', enum: ['error'] },
+                last_config_update: { type: 'string', format: 'date-time' }
+            }
+        },
+        AgentMonitoringSummaryResponse: {
+            type: 'object',
+            properties: {
+                status_counts: { '$ref': '#/components/schemas/AgentStatusCounts' },
+                recently_active_agents: {
+                    type: 'array',
+                    items: { '$ref': '#/components/schemas/RecentlyActiveAgentItem' }
+                },
+                error_state_agents: {
+                    type: 'array',
+                    items: { '$ref': '#/components/schemas/ErrorStateAgentItem' }
+                }
+            }
         }
       },
       securitySchemes: { // Define security schemes (e.g., Bearer token for JWT)

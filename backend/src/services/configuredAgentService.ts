@@ -124,3 +124,132 @@ export const executeAgent = async (agentId: string, inputData: any) => {
   console.warn(`No specific logic implemented for core_logic_identifier: ${agentTemplate.core_logic_identifier}`);
   return { success: false, message: `Agent ${agent.bank_specific_name} execution failed: No logic for template type.`, output: null };
 };
+
+
+export interface AgentSelectionCriteria {
+  name_matches?: string; // For bank_specific_name (exact or pattern)
+  template_id?: string; // Exact template_id
+  template_name?: string; // Exact name from agent_templates table
+  status?: 'active' | 'inactive' | 'error';
+  // Future: tags?: string[]; // If configured_agents get a tags JSONB field
+}
+
+export const findConfiguredAgentByCriteria = async (criteria: AgentSelectionCriteria, userId?: string): Promise<any | null> => {
+  let queryStr = 'SELECT ca.*, at.name as template_name FROM configured_agents ca JOIN agent_templates at ON ca.template_id = at.template_id';
+  const conditions: string[] = [];
+  const values: any[] = [];
+  let valueIndex = 1;
+
+  if (userId) {
+    conditions.push(`ca.user_id = $${valueIndex++}`);
+    values.push(userId);
+  }
+
+  if (criteria.name_matches) {
+    // Using LIKE for pattern matching, could also offer exact match
+    conditions.push(`ca.bank_specific_name ILIKE $${valueIndex++}`); // ILIKE for case-insensitive
+    values.push(`%${criteria.name_matches}%`); // Wildcard search
+  }
+
+  if (criteria.template_id) {
+    conditions.push(`ca.template_id = $${valueIndex++}`);
+    values.push(criteria.template_id);
+  }
+
+  if (criteria.template_name) {
+    conditions.push(`at.name = $${valueIndex++}`);
+    values.push(criteria.template_name);
+  }
+
+  if (criteria.status) {
+    conditions.push(`ca.status = $${valueIndex++}`);
+    values.push(criteria.status);
+  } else {
+    // Default to only selecting 'active' agents if no specific status is requested
+    conditions.push(`ca.status = 'active'`);
+  }
+
+  if (conditions.length > 0) {
+    queryStr += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  queryStr += ' ORDER BY ca.created_at DESC LIMIT 1'; // Get the most recently created one if multiple match
+
+  console.log('Dynamic agent query:', queryStr, values);
+  const result = await query(queryStr, values);
+  return result.rows[0] || null;
+};
+
+
+// --- Agent Monitoring Service Functions ---
+
+export const getAgentStatusCounts = async (userId?: string): Promise<{ active: number, inactive: number, error: number, total: number }> => {
+  let countQuery = 'SELECT status, COUNT(*) as count FROM configured_agents';
+  const queryParams: any[] = [];
+  if (userId) {
+    countQuery += ' WHERE user_id = $1';
+    queryParams.push(userId);
+  }
+  countQuery += ' GROUP BY status';
+
+  const result = await query(countQuery, queryParams);
+  const counts = { active: 0, inactive: 0, error: 0, total: 0 };
+  result.rows.forEach(row => {
+    if (row.status === 'active') counts.active = parseInt(row.count, 10);
+    else if (row.status === 'inactive') counts.inactive = parseInt(row.count, 10);
+    else if (row.status === 'error') counts.error = parseInt(row.count, 10);
+  });
+  counts.total = counts.active + counts.inactive + counts.error;
+  return counts;
+};
+
+export const getRecentlyActiveAgents = async (limit: number = 5, userId?: string): Promise<any[]> => {
+  // "Recently active" is defined by tasks assigned to them that are completed or in_progress, ordered by task's last update.
+  // This is a simplified definition. A more robust one might involve last_execution_time on agents table.
+  let queryString = `
+    SELECT DISTINCT ON (ca.agent_id)
+           ca.agent_id, ca.bank_specific_name, ca.status, at.name as template_name, t.updated_at as last_task_activity
+    FROM configured_agents ca
+    JOIN agent_templates at ON ca.template_id = at.template_id
+    JOIN tasks t ON ca.agent_id = t.assigned_to_agent_id
+  `;
+  const conditions: string[] = [];
+  const queryParams: any[] = [];
+  let paramIndex = 1;
+
+  if (userId) {
+    conditions.push(`ca.user_id = $${paramIndex++}`);
+    queryParams.push(userId);
+  }
+  // Consider only tasks that show activity
+  conditions.push(`t.status IN ('completed', 'in_progress', 'failed')`);
+
+  if (conditions.length > 0) {
+    queryString += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  queryString += ` ORDER BY ca.agent_id, t.updated_at DESC LIMIT $${paramIndex++}`;
+  queryParams.push(limit);
+
+  const result = await query(queryString, queryParams);
+  return result.rows;
+};
+
+
+export const getAgentsInErrorState = async (userId?: string): Promise<any[]> => {
+  let queryString = `
+    SELECT ca.agent_id, ca.bank_specific_name, ca.status, at.name as template_name, ca.updated_at as last_config_update
+    FROM configured_agents ca
+    JOIN agent_templates at ON ca.template_id = at.template_id
+    WHERE ca.status = 'error'
+  `;
+  const queryParams: any[] = [];
+  if (userId) {
+    queryString += ' AND ca.user_id = $1';
+    queryParams.push(userId);
+  }
+  queryString += ' ORDER BY ca.updated_at DESC';
+
+  const result = await query(queryString, queryParams);
+  return result.rows;
+};

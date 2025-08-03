@@ -51,6 +51,14 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/admin/agent-templates', agentTemplateAdminRoutes);
 app.use('/api/admin/workflows', workflowAdminRoutes);
 
+// Agent Monitoring Admin Route
+import agentMonitoringAdminRoutes from './api/admin/agentMonitoringAdminRoutes';
+app.use('/api/admin/agents', agentMonitoringAdminRoutes); // Base path for agent admin things
+
+// Mount Notification Routes
+import notificationRoutes from './api/notifications/notificationRoutes';
+app.use('/api/notifications', notificationRoutes);
+
 
 // Seed initial data (for development convenience)
 import { seedInitialAgentTemplates } from './services/agentTemplateService';

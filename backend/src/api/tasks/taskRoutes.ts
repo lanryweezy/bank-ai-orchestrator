@@ -6,10 +6,11 @@ import {
     taskInputSchema, // For validating output data primarily in completeTask
     createTaskComment,
     getTaskComments,
-    taskCommentSchema
+    taskCommentSchema,
+    getTaskSummaryForUser
 } from '../../services/taskService';
 import { processTaskCompletionAndContinueWorkflow } from '../../services/workflowRunService'; // Use this to handle completion
-import { authenticateToken, isBankUser, isPlatformAdmin } // Assuming isBankUser for general task ops
+import { authenticateToken, isBankUser, isPlatformAdmin }
     from '../../middleware/authMiddleware';
 
 const router = express.Router();
@@ -208,5 +209,68 @@ router.get('/:taskId/comments', async (req: express.Request, res: express.Respon
 
 
 // Other task actions like claim, assign, update_details could be added here.
+
+
+/**
+ * @openapi
+ * /tasks/summary:
+ *   get:
+ *     tags: [Tasks]
+ *     summary: Get task summary for the authenticated user
+ *     description: Retrieves counts of tasks by status (pending, assigned, in_progress) and a list of recent/upcoming tasks.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 5
+ *         description: Number of recent tasks to return.
+ *     responses:
+ *       '200':
+ *         description: Task summary retrieved successfully.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 counts:
+ *                   type: object
+ *                   properties:
+ *                     pending: { type: integer }
+ *                     assigned: { type: integer }
+ *                     in_progress: { type: integer }
+ *                 recent_tasks:
+ *                   type: array
+ *                   items:
+ *                     type: object # Define a minimal TaskSummaryItem schema if needed
+ *                     properties:
+ *                       task_id: { type: string, format: uuid }
+ *                       step_name_in_workflow: { type: string }
+ *                       workflow_name: { type: string }
+ *                       status: { type: string }
+ *                       due_date: { type: string, format: date-time, nullable: true }
+ *       '500':
+ *         description: Internal server error.
+ */
+router.get('/summary', async (req: express.Request, res: express.Response) => {
+    try {
+        const userId = req.user!.userId;
+        const userRole = req.user!.role;
+        const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 5;
+
+        if (isNaN(limit) || limit <= 0) {
+            return res.status(400).json({ message: "Invalid limit parameter." });
+        }
+
+        const summary = await getTaskSummaryForUser(userId, userRole, limit);
+        res.status(200).json(summary);
+    } catch (error) {
+        console.error('Error fetching task summary:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
 
 export default router;

@@ -6,11 +6,17 @@ import { z } from 'zod';
 // Forward declaration for recursive step schema
 const baseWorkflowStepDefinitionSchemaWithoutRef = z.object({
   name: z.string(),
-  type: z.enum(['agent_execution', 'human_review', 'data_input', 'decision', 'parallel', 'join', 'end', 'sub_workflow']), // Added sub_workflow
+  type: z.enum(['agent_execution', 'human_review', 'data_input', 'decision', 'parallel', 'join', 'end', 'sub_workflow']),
   description: z.string().optional(),
-  agent_core_logic_identifier: z.string().optional(), // For agent_execution
-  assigned_role: z.string().optional(), // For human_review, data_input, decision
-  form_schema: z.record(z.any()).optional(), // For human_review, data_input, decision
+
+  // For 'agent_execution'
+  agent_core_logic_identifier: z.string().optional(), // Legacy or for template identification
+  configured_agent_id: z.string().uuid().optional(), // Direct assignment of a configured agent instance
+  agent_selection_criteria: z.record(z.any()).optional(), // For dynamic selection of an agent instance
+
+  // For human tasks
+  assigned_role: z.string().optional(),
+  form_schema: z.record(z.any()).optional(),
 
   // For 'parallel' type
   join_on: z.string().optional(),
@@ -18,7 +24,7 @@ const baseWorkflowStepDefinitionSchemaWithoutRef = z.object({
   // For 'sub_workflow' type
   sub_workflow_name: z.string().optional(),
   sub_workflow_version: z.number().int().positive().optional(),
-  input_mapping: z.record(z.string()).optional(), // e.g. {"subWorkflowVar": "parentContext.valueToMap"}
+  input_mapping: z.record(z.string()).optional(),
 
   // Common fields
   transitions: z.array(z.object({
@@ -188,6 +194,21 @@ const validateWorkflowLogic = (definitionJson: z.infer<typeof workflowDefinition
                 // actually exists in the database. This might be too slow for real-time validation in an editor
                 // and could make definitions too tightly coupled during design time.
                 // For now, just ensuring the field is present.
+            }
+
+            // Validate agent_execution steps
+            if (step.type === 'agent_execution') {
+                const hasDirectId = !!step.configured_agent_id;
+                const hasCriteria = !!step.agent_selection_criteria && Object.keys(step.agent_selection_criteria).length > 0;
+                const hasLegacyIdentifier = !!step.agent_core_logic_identifier;
+
+                if (!hasDirectId && !hasCriteria && !hasLegacyIdentifier) {
+                    issues.push(`Agent execution step "${currentPath}" must have 'configured_agent_id', 'agent_selection_criteria', or 'agent_core_logic_identifier'.`);
+                }
+                if (hasDirectId && hasCriteria) {
+                    issues.push(`Agent execution step "${currentPath}" cannot have both 'configured_agent_id' and 'agent_selection_criteria'. Choose one method.`);
+                }
+                // Further validation of criteria structure could be added if specific keys are expected.
             }
         }
     };

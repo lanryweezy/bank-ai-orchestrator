@@ -395,7 +395,13 @@ const WorkflowDefinitionEditPage: React.FC = () => {
                   rows={15}
                   className="mt-1 font-mono text-sm"
                 />
-                <p className="text-xs text-gray-500 mt-1">The JSON structure defining the workflow steps, transitions, and logic.</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Define steps, transitions, and agent interactions. For agent steps, use
+                  <code className="text-xs bg-gray-200 p-0.5 rounded">"type": "agent_execution"</code>.
+                  Assign agents via <code className="text-xs bg-gray-200 p-0.5 rounded">"configured_agent_id": "uuid"</code> for direct assignment,
+                  or <code className="text-xs bg-gray-200 p-0.5 rounded">"agent_selection_criteria": {"{/* criteria */}"}</code> for dynamic selection.
+                  Example criteria: <code className="text-xs bg-gray-200 p-0.5 rounded">{"{\"name_matches\": \"LoanAgent_US\", \"status\": \"active\"}"}</code>.
+                </p>
               </div>
             </CardContent>
             <CardFooter>
