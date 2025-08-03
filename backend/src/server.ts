@@ -11,7 +11,18 @@ const PORT = serverConfig.port;
 
 // Middleware
 app.use(helmet()); // Basic security headers
-app.use(cors()); // Enable CORS for all routes
+
+// CORS configuration for production
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production' 
+    ? [process.env.FRONTEND_URL, 'https://*.vercel.app']
+    : ['http://localhost:8080', 'http://localhost:3000'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+app.use(cors(corsOptions)); // Enable CORS with configuration
 app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
@@ -69,20 +80,42 @@ import { seedBankingWorkflowTemplates } from './services/bankingWorkflowTemplate
 import { query } from './config/db';
 
 const startServer = async () => {
-  await seedInitialAgentTemplates();
-  await seedInitialWorkflowDefinitions();
-  await seedBankingWorkflowTemplates(query);
+  try {
+    console.log('🚀 Starting banking application server...');
+    
+    // Only seed data in development or when explicitly requested
+    if (process.env.NODE_ENV !== 'production' || process.env.SEED_DATA === 'true') {
+      console.log('🌱 Seeding initial data...');
+      await seedInitialAgentTemplates();
+      await seedInitialWorkflowDefinitions();
+      await seedBankingWorkflowTemplates(query);
+      console.log('✅ Data seeding completed');
+    }
 
-  // testConnection().catch(err => console.error("DB connection test failed on startup:", err));
-  // Start listening only after seeding (if any) is complete
-  app.listen(PORT, () => {
-    console.log(`Backend server is running on http://localhost:${PORT}`);
-  });
+    // Test database connection
+    try {
+      await query('SELECT NOW()');
+      console.log('✅ Database connection successful');
+    } catch (dbError) {
+      console.error('❌ Database connection failed:', dbError);
+    }
+
+    // Start server only if not running in Vercel (serverless)
+    if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+      app.listen(PORT, () => {
+        console.log(`🏦 Banking server running on http://localhost:${PORT}`);
+        console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
+      });
+    }
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      process.exit(1);
+    }
+  }
 };
 
-startServer().catch(error => {
-  console.error("Failed to start the server:", error);
-  process.exit(1);
-});
+// Initialize server
+startServer();
 
 export default app; // For potential testing or programmatic use

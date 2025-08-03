@@ -2,16 +2,25 @@ import * as dotenv from 'dotenv';
 
 dotenv.config(); // Load .env file
 
-export const dbConfig = {
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'bank_db',
-  password: process.env.DB_PASSWORD || 'password',
-  port: parseInt(process.env.DB_PORT || '5432', 10),
-};
+// Production-ready database configuration
+const isProduction = process.env.NODE_ENV === 'production';
+
+export const dbConfig = process.env.DATABASE_URL 
+  ? {
+      connectionString: process.env.DATABASE_URL,
+      ssl: isProduction ? { rejectUnauthorized: false } : false,
+    }
+  : {
+      user: process.env.DB_USER || process.env.POSTGRES_USER || 'postgres',
+      host: process.env.DB_HOST || process.env.POSTGRES_HOST || 'localhost',
+      database: process.env.DB_NAME || process.env.POSTGRES_DB || 'bank_db',
+      password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || 'password',
+      port: parseInt(process.env.DB_PORT || process.env.POSTGRES_PORT || '5432', 10),
+      ssl: false,
+    };
 
 export const jwtConfig = {
-  secret: process.env.JWT_SECRET || 'your-very-secret-key',
+  secret: process.env.JWT_SECRET || process.env.AUTH_SECRET || 'your-very-secret-key-change-in-production',
   expiresIn: parseInt(process.env.JWT_EXPIRES_IN_SECONDS || '3600', 10), // Expect seconds, default 1 hour
 };
 

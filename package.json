@@ -5,14 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && npm run build:backend",
     "build:dev": "vite build --mode development",
+    "build:frontend": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "dev:backend": "nodemon backend/src/server.ts",
     "build:backend": "tsc --project tsconfig.backend.json",
     "start:backend": "node dist/backend/server.js",
-    "test:backend": "jest --config ./backend/jest.config.ts --runInBand"
+    "test:backend": "jest --config ./backend/jest.config.ts --runInBand",
+    "vercel-build": "npm run build:frontend && npm run build:backend"
   },
   "dependencies": {
     "helmet": "^7.1.0",
