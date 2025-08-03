@@ -1,7 +1,10 @@
 
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useEffect } from 'react';
+import GenericCard from './GenericCard';
+import { mockLoans } from '@/data/mockLoans';
+import apiClient from '@/services/apiClient';
 import { Button } from '@/components/ui/button';
+import AddLoanModal from './AddLoanModal';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
@@ -17,47 +20,34 @@ import {
   Users
 } from 'lucide-react';
 
-interface LoanApplication {
-  id: string;
-  customerName: string;
-  customerBVN: string;
-  loanType: string;
-  requestedAmount: number;
-  status: 'pending' | 'under_review' | 'approved' | 'rejected' | 'disbursed';
-  creditScore: number;
-  applicationDate: string;
-  purpose: string;
-  repaymentPeriod: number;
-}
+import { LoanApplication } from '@/types/loan';
 
 const LoanManagement: React.FC = () => {
-  const [applications] = useState<LoanApplication[]>([
-    {
-      id: 'LN001',
-      customerName: 'Adebayo Johnson',
-      customerBVN: '22234567890',
-      loanType: 'Personal Loan',
-      requestedAmount: 500000,
-      status: 'under_review',
-      creditScore: 720,
-      applicationDate: '2024-01-15',
-      purpose: 'Business Expansion',
-      repaymentPeriod: 12
-    },
-    {
-      id: 'LN002',
-      customerName: 'Fatima Abubakar', 
-      customerBVN: '22234567891',
-      loanType: 'SME Loan',
-      requestedAmount: 2000000,
-      status: 'approved',
-      creditScore: 680,
-      applicationDate: '2024-01-10',
-      purpose: 'Equipment Purchase',
-      repaymentPeriod: 24
-    }
-  ]);
+  const [applications, setApplications] = useState<LoanApplication[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const fetchLoans = async () => {
+      try {
+        // const data = await apiClient<LoanApplication[]>('/loans');
+        // setApplications(data);
+        setApplications(mockLoans); // Using mock data for now
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchLoans();
+  }, []);
+
+  /**
+   * Returns the color for the status badge based on the status.
+   * @param status The status of the loan application.
+   * @returns The color for the status badge.
+   */
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'approved': return 'bg-green-100 text-green-800';
@@ -69,6 +59,11 @@ const LoanManagement: React.FC = () => {
     }
   };
 
+  /**
+   * Returns the icon for the status badge based on the status.
+   * @param status The status of the loan application.
+   * @returns The icon for the status badge.
+   */
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'approved': return <CheckCircle className="h-4 w-4 text-green-500" />;
@@ -92,14 +87,39 @@ const LoanManagement: React.FC = () => {
     return 'text-red-600';
   };
 
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
+
+  const handleLoanAdded = (newLoan: LoanApplication) => {
+    setApplications(prevApplications => [newLoan, ...prevApplications]);
+  };
+
+  const handleLoanStatusChange = (loanId: string, newStatus: 'approved' | 'rejected') => {
+    setApplications(prevApplications =>
+      prevApplications.map(app =>
+        app.id === loanId ? { ...app, status: newStatus } : app
+      )
+    );
+  };
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Loan Management</h2>
-        <Button className="banking-gradient text-white">
-          <Calculator className="h-4 w-4 mr-2" />
-          New Application
-        </Button>
+        <AddLoanModal onLoanAdded={handleLoanAdded} />
       </div>
 
       {/* Statistics Cards */}
@@ -164,28 +184,15 @@ const LoanManagement: React.FC = () => {
         <TabsContent value="applications" className="space-y-4">
           <div className="space-y-4">
             {applications.map((application) => (
-              <Card key={application.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="p-3 bg-blue-100 rounded-lg">
-                        <CreditCard className="h-6 w-6 text-blue-600" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-lg">{application.customerName}</h3>
-                        <p className="text-sm text-gray-600">Application ID: {application.id}</p>
-                        <p className="text-sm text-gray-600">BVN: {application.customerBVN}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <Badge className={getStatusColor(application.status)}>
-                        {application.status.replace('_', ' ')}
-                      </Badge>
-                      <p className="text-sm text-gray-500 mt-1">{application.applicationDate}</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+              <GenericCard
+                key={application.id}
+                title={application.customerName}
+                subtitle={`Application ID: ${application.id}`}
+                icon={<CreditCard className="h-6 w-6 text-blue-600" />}
+                status={application.status.replace('_', ' ')}
+                statusColor={getStatusColor(application.status)}
+              >
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
                     <div>
                       <p className="text-sm text-gray-600">Loan Type</p>
                       <p className="font-medium">{application.loanType}</p>
@@ -224,18 +231,17 @@ const LoanManagement: React.FC = () => {
                       </Button>
                       {application.status === 'under_review' && (
                         <>
-                          <Button variant="outline" size="sm" className="text-green-600">
+                          <Button variant="outline" size="sm" className="text-green-600" onClick={() => handleLoanStatusChange(application.id, 'approved')}>
                             Approve
                           </Button>
-                          <Button variant="outline" size="sm" className="text-red-600">
+                          <Button variant="outline" size="sm" className="text-red-600" onClick={() => handleLoanStatusChange(application.id, 'rejected')}>
                             Reject
                           </Button>
                         </>
                       )}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+              </GenericCard>
             ))}
           </div>
         </TabsContent>

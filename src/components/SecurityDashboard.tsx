@@ -1,6 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { mockSecurityEvents, mockAuditLogs } from '@/data/mockSecurity';
+import apiClient from '@/services/apiClient';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -17,51 +19,29 @@ import {
 } from 'lucide-react';
 
 const SecurityDashboard: React.FC = () => {
-  const [securityEvents] = useState([
-    {
-      id: '1',
-      type: 'login_attempt',
-      severity: 'medium',
-      message: 'Multiple failed login attempts from Credit Analyzer agent',
-      timestamp: '2 minutes ago',
-      agent: 'Credit Analyzer'
-    },
-    {
-      id: '2',
-      type: 'data_access',
-      severity: 'low',
-      message: 'Bulk customer data accessed by Compliance Bot',
-      timestamp: '15 minutes ago',
-      agent: 'Compliance Bot'
-    },
-    {
-      id: '3',
-      type: 'permission_change',
-      severity: 'high',
-      message: 'Agent permissions modified by Head of IT',
-      timestamp: '1 hour ago',
-      user: 'John Doe'
-    }
-  ]);
+  const [securityEvents, setSecurityEvents] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [auditLogs] = useState([
-    {
-      id: '1',
-      action: 'Knowledge Base Updated',
-      user: 'Head of Loans',
-      agent: 'Credit Analyzer',
-      timestamp: '10:30 AM',
-      details: 'Updated credit scoring rules'
-    },
-    {
-      id: '2',
-      action: 'Agent Deployed',
-      user: 'System Admin',
-      agent: 'New Chatbot',
-      timestamp: '09:15 AM',
-      details: 'Customer service chatbot v2.1'
-    }
-  ]);
+  useEffect(() => {
+    const fetchSecurityData = async () => {
+      try {
+        // const events = await apiClient<any[]>('/security/events');
+        // const logs = await apiClient<any[]>('/security/audit-logs');
+        // setSecurityEvents(events);
+        // setAuditLogs(logs);
+        setSecurityEvents(mockSecurityEvents); // Using mock data for now
+        setAuditLogs(mockAuditLogs); // Using mock data for now
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchSecurityData();
+  }, []);
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -71,6 +51,14 @@ const SecurityDashboard: React.FC = () => {
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
 
   return (
     <div className="space-y-6">

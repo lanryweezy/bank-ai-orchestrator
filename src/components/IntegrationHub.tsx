@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus } from 'lucide-react';
@@ -7,18 +7,55 @@ import IntegrationCard from './IntegrationCard';
 import AvailableServiceCard from './AvailableServiceCard';
 import IntegrationConfiguration from './IntegrationConfiguration';
 import { mockIntegrations, availableServices } from '@/data/mockIntegrations';
+import apiClient from '@/services/apiClient';
+import AddIntegrationModal from './AddIntegrationModal';
 
 const IntegrationHub: React.FC = () => {
-  const [integrations] = useState(mockIntegrations);
+  const [integrations, setIntegrations] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchIntegrations = async () => {
+      try {
+        // const data = await apiClient<any[]>('/integrations');
+        // setIntegrations(data);
+        setIntegrations(mockIntegrations); // Using mock data for now
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchIntegrations();
+  }, []);
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
+
+  const handleIntegrationAdded = (newIntegration: any) => {
+    setIntegrations(prevIntegrations => [newIntegration, ...prevIntegrations]);
+  };
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Integration Hub</h2>
-        <Button className="banking-gradient text-white">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Integration
-        </Button>
+        <AddIntegrationModal onIntegrationAdded={handleIntegrationAdded} />
       </div>
 
       <Tabs defaultValue="active" className="w-full">

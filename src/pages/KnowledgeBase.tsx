@@ -1,6 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
+import { mockAgents, mockKnowledgeItems } from '@/data/mockKnowledgeBase';
+import apiClient from '@/services/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,54 +28,75 @@ const KnowledgeBase = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [newRule, setNewRule] = useState('');
   const [newTemplate, setNewTemplate] = useState('');
+  const [agents, setAgents] = useState<any[]>([]);
+  const [knowledgeItems, setKnowledgeItems] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const agents = [
-    { id: 'credit-analyzer', name: 'Credit Analyzer', department: 'Loans' },
-    { id: 'chatbot', name: 'Customer Support Bot', department: 'Customer Service' },
-    { id: 'email-parser', name: 'Email Parser', department: 'Operations' },
-    { id: 'kyc-validator', name: 'KYC Validator', department: 'Compliance' },
-  ];
+  useEffect(() => {
+    const fetchKnowledgeBase = async () => {
+      try {
+        // const agentsData = await apiClient<any[]>('/agents');
+        // const knowledgeData = await apiClient<any[]>(`/knowledgebase/${selectedAgent}`);
+        // setAgents(agentsData);
+        // setKnowledgeItems(knowledgeData);
+        setAgents(mockAgents);
+        setKnowledgeItems(mockKnowledgeItems);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const knowledgeItems = [
-    {
-      id: 1,
-      type: 'rule',
-      title: 'BVN Requirement',
-      content: 'All loan applications must include a valid BVN number',
-      category: 'Loan Processing',
-      lastUpdated: '2024-01-15'
-    },
-    {
-      id: 2,
-      type: 'template',
-      title: 'Loan Approval Response',
-      content: 'Dear {{customer_name}}, your loan application for ₦{{amount}} has been approved...',
-      category: 'Communication',
-      lastUpdated: '2024-01-10'
-    },
-    {
-      id: 3,
-      type: 'rule',
-      title: 'Income Verification',
-      content: 'Monthly income must be at least 2x the requested loan amount',
-      category: 'Loan Processing',
-      lastUpdated: '2024-01-12'
-    },
-  ];
+    fetchKnowledgeBase();
+  }, [selectedAgent]);
 
   const handleSaveRule = () => {
     if (newRule.trim()) {
-      console.log('Saving rule:', newRule);
+      const newRuleItem = {
+        id: Math.random(),
+        type: 'rule',
+        title: 'New Rule',
+        content: newRule,
+        category: 'Uncategorized',
+        lastUpdated: new Date().toISOString().split('T')[0],
+      };
+      setKnowledgeItems(prevItems => [newRuleItem, ...prevItems]);
       setNewRule('');
     }
   };
 
   const handleSaveTemplate = () => {
     if (newTemplate.trim()) {
-      console.log('Saving template:', newTemplate);
+      const newTemplateItem = {
+        id: Math.random(),
+        type: 'template',
+        title: 'New Template',
+        content: newTemplate,
+        category: 'Uncategorized',
+        lastUpdated: new Date().toISOString().split('T')[0],
+      };
+      setKnowledgeItems(prevItems => [newTemplateItem, ...prevItems]);
       setNewTemplate('');
     }
   };
+
+  if (isLoading) {
+    return <Layout><div>Loading...</div></Layout>;
+  }
+
+  if (error) {
+    return <Layout><div>Error: {error}</div></Layout>;
+  }
+
+  if (isLoading) {
+    return <Layout><div>Loading...</div></Layout>;
+  }
+
+  if (error) {
+    return <Layout><div>Error: {error}</div></Layout>;
+  }
 
   return (
     <Layout>

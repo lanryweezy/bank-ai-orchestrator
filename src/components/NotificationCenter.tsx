@@ -1,6 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { mockNotifications } from '@/data/mockNotifications';
+import apiClient from '@/services/apiClient';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -25,44 +27,25 @@ interface Notification {
 }
 
 const NotificationCenter: React.FC = () => {
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: '1',
-      type: 'error',
-      title: 'Agent Failure',
-      message: 'Credit Analyzer failed to process loan application due to missing documents',
-      timestamp: '2 minutes ago',
-      agent: 'Credit Analyzer',
-      read: false
-    },
-    {
-      id: '2',
-      type: 'success',
-      title: 'Task Completed',
-      message: 'Monthly compliance report has been generated successfully',
-      timestamp: '15 minutes ago',
-      agent: 'Compliance Bot',
-      read: false
-    },
-    {
-      id: '3',
-      type: 'warning',
-      title: 'High Load Alert',
-      message: 'Email Parser is experiencing high volume - response time may be affected',
-      timestamp: '1 hour ago',
-      agent: 'Email Parser',
-      read: true
-    },
-    {
-      id: '4',
-      type: 'info',
-      title: 'Knowledge Base Updated',
-      message: 'HR Assistant knowledge base has been updated with new policies',
-      timestamp: '2 hours ago',
-      agent: 'HR Assistant',
-      read: true
-    }
-  ]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        // const data = await apiClient<Notification[]>('/notifications');
+        // setNotifications(data);
+        setNotifications(mockNotifications); // Using mock data for now
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchNotifications();
+  }, []);
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -95,6 +78,14 @@ const NotificationCenter: React.FC = () => {
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
 
   return (
     <div className="space-y-6">
